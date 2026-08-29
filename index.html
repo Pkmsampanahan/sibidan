@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SiBidan Terpadu - UPTD Puskesmas Sampanahan</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- SheetJS (xlsx) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Firebase SDK (v9 Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    @keyframes slideDown {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-down {
+      animation: slideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    
+    /* CSS STICKY / FREEZE COLUMN TABEL MATRIKS */
+    .freeze-col-no {
+      position: sticky !important;
+      left: 0 !important;
+      z-index: 20 !important;
+      width: 40px !important;
+      min-width: 40px !important;
+      max-width: 40px !important;
+    }
+    .freeze-col-label {
+      position: sticky !important;
+      left: 40px !important;
+      z-index: 20 !important;
+      width: 145px !important;
+      min-width: 145px !important;
+      max-width: 160px !important;
+      box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.12) !important;
+    }
+    thead .freeze-col-no, thead .freeze-col-label {
+      z-index: 30 !important;
+    }
+    tfoot .freeze-col-no, tfoot .freeze-col-label {
+      z-index: 25 !important;
+    }
+
+    @media print {
+      body * { visibility: hidden; }
+      #modalMatriksContent, #modalMatriksContent * { visibility: visible; }
+      #modalMatriksContent { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- BANNER AUTO-UPDATE -->
+  <div id="updateBanner" class="hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-teal-600 text-white shadow-lg sticky top-0 z-50 animate-slide-down border-b border-white/20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+      <div class="flex items-center gap-2">
+        <span class="p-1 bg-white/20 rounded-lg"><i class="fa-solid fa-arrows-rotate animate-spin text-amber-300"></i></span>
+        <span class="font-medium">Pembaruan Tersedia: <strong id="newVersionText">v1.2.1</strong> &bull; <span id="newVersionDesc" class="opacity-90">Peningkatan sistem dan perbaikan fitur</span></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnApplyUpdate" onclick="applyAppUpdate()" class="bg-white text-indigo-700 hover:bg-indigo-50 font-bold px-3 py-1 rounded-md shadow-sm transition flex items-center gap-1.5 text-xs">
+          <i class="fa-solid fa-cloud-arrow-down"></i> Perbarui Sekarang
+        </button>
+        <button onclick="dismissUpdateBanner()" class="text-white/80 hover:text-white p-1" title="Tutup">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP NAVBAR -->
+  <header class="bg-teal-700 text-white shadow-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-3">
+      
+      <!-- Brand & Versi -->
+      <div class="flex items-center space-x-3">
+        <div class="bg-white/10 p-2 rounded-xl backdrop-blur-sm">
+          <i class="fa-solid fa-hospital text-2xl text-rose-300"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight leading-tight">SiBidan Terpadu</h1>
+            <span id="appVersionBadge" class="bg-teal-900/80 text-teal-200 border border-teal-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.2.0</span>
+          </div>
+          <p class="text-xs text-teal-100">UPTD Puskesmas Sampanahan & Poskesdes</p>
+        </div>
+      </div>
+      
+      <!-- Action Buttons & Auth -->
+      <div class="flex items-center gap-2">
+        <!-- Tombol Matriks Rekapitulasi Sasaran -->
+        <button onclick="openModalMatriks()" class="bg-teal-600/90 hover:bg-teal-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 shadow-sm border border-teal-400/40">
+          <i class="fa-solid fa-table-cells text-amber-300"></i> <span>Matriks Rekap Sasaran</span>
+        </button>
+
+        <!-- Menu Khusus Petugas/Bidan (Admin) -->
+        <div id="adminActions" class="hidden flex items-center gap-2">
+          <button onclick="openModalDesa()" class="bg-teal-800 hover:bg-teal-600 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-sm border border-teal-500">
+            <i class="fa-solid fa-gears"></i> <span class="hidden md:inline">Kelola Desa & Sistem</span>
+          </button>
+          <button onclick="openModalTambah()" class="bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-user-plus"></i> <span class="hidden md:inline">Tambah Sasaran</span>
+          </button>
+          <button onclick="triggerExcelUpload()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-file-excel"></i> <span class="hidden md:inline">Import Excel</span>
+          </button>
+          <button onclick="hapusDataDesaAktif()" class="bg-rose-700 hover:bg-rose-600 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-sm" title="Hapus Data Desa Ini">
+            <i class="fa-solid fa-trash-can"></i> <span class="hidden md:inline">Reset Data Desa</span>
+          </button>
+          <input type="file" id="excelFileInput" class="hidden" accept=".xlsx, .xls" onchange="handleExcelUpload(event)">
+        </div>
+
+        <!-- Tombol Login / Logout -->
+        <div id="authContainer">
+          <button id="btnLoginModal" onclick="openLoginModal()" class="bg-white text-teal-800 hover:bg-teal-50 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+            <i class="fa-solid fa-right-to-bracket"></i> Login Bidan / Admin
+          </button>
+          
+          <div id="userProfile" class="hidden flex items-center gap-2">
+            <div class="hidden lg:block text-right">
+              <div id="userEmailText" class="text-xs font-semibold text-white">bidan@puskesmas.id</div>
+              <div class="text-[10px] text-teal-200">Akses Bidan Terverifikasi</div>
+            </div>
+            <button onclick="handleLogout()" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-1.5 shadow-sm" title="Keluar">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hidden sm:inline">Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- WILAYAH KERJA & STATUS SELECTOR -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="fa-solid fa-location-dot text-teal-600"></i> Wilayah Desa:
+        </label>
+        <select id="pilihDesa" onchange="onDesaChange()" class="w-full sm:w-72 py-2 px-3 border-2 border-teal-600/50 bg-teal-50/50 rounded-lg text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500">
+          <option value="ALL">🌐 Semua Wilayah Puskesmas (Gabungan)</option>
+        </select>
+      </div>
+
+      <div class="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-2 md:pt-0">
+        <div class="flex items-center gap-2">
+          <span id="roleIndicatorDot" class="inline-flex h-3 w-3 rounded-full bg-amber-400"></span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500" id="roleText">Mode Tamu (Privasi Terkunci)</span>
+        </div>
+        <div id="dbStatus" class="text-xs text-slate-500 font-medium">
+          <i class="fa-solid fa-circle-notch fa-spin text-teal-600"></i> Menghubungkan...
+        </div>
+      </div>
+    </div>
+
+    <!-- REKAP KARTU SASARAN PWS KIA / KB / POSYANDU -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="text-slate-500 text-xs font-medium flex items-center justify-between">
+          <span>Total Penduduk</span>
+          <i class="fa-solid fa-users text-slate-400"></i>
+        </div>
+        <div class="mt-2 text-2xl font-bold text-slate-800" id="statTotal">-</div>
+      </div>
+
+      <div class="bg-pink-50/70 p-4 rounded-xl border border-pink-200 shadow-sm flex flex-col justify-between">
+        <div class="text-pink-700 text-xs font-medium flex items-center justify-between">
+          <span>Ibu Hamil</span>
+          <i class="fa-solid fa-person-pregnant text-pink-500"></i>
+        </div>
+        <div class="mt-2 text-2xl font-bold text-pink-700" id="statBumil">-</div>
+      </div>
+
+      <div class="bg-amber-50/70 p-4 rounded-xl border border-amber-200 shadow-sm flex flex-col justify-between">
+        <div class="text-amber-800 text-xs font-medium flex items-center justify-between">
+          <span>Bayi & Balita</span>
+          <i class="fa-solid fa-baby text-amber-500"></i>
+        </div>
+        <div class="mt-2 text-2xl font-bold text-amber-800" id="statBalita">-</div>
+      </div>
+
+      <div class="bg-teal-50/70 p-4 rounded-xl border border-teal-200 shadow-sm flex flex-col justify-between">
+        <div class="text-teal-800 text-xs font-medium flex items-center justify-between">
+          <span>Akseptor KB</span>
+          <i class="fa-solid fa-hand-holding-heart text-teal-600"></i>
+        </div>
+        <div class="mt-2 text-2xl font-bold text-teal-800" id="statKB">-</div>
+      </div>
+
+      <div class="bg-rose-50/70 p-4 rounded-xl border border-rose-200 shadow-sm flex flex-col justify-between">
+        <div class="text-rose-800 text-xs font-medium flex items-center justify-between">
+          <span>Risiko 4T / ALKI</span>
+          <i class="fa-solid fa-triangle-exclamation text-rose-500"></i>
+        </div>
+        <div class="mt-2 text-2xl font-bold text-rose-800" id="statRisti">-</div>
+      </div>
+
+      <div class="bg-purple-50/70 p-4 rounded-xl border border-purple-200 shadow-sm flex flex-col justify-between">
+        <div class="text-purple-800 text-xs font-medium flex items-center justify-between">
+          <span>Lansia (>60 th)</span>
+          <i class="fa-solid fa-person-walking-with-cane text-purple-600"></i>
+        </div>
+        <div class="mt-2 text-2xl font-bold text-purple-800" id="statLansia">-</div>
+      </div>
+    </div>
+
+    <!-- FILTER & TABS SECTION -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
+      <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+        <button onclick="setTab('semua')" id="tab-semua" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-teal-700 text-white transition">
+          Semua Data
+        </button>
+        <button onclick="setTab('bumil')" id="tab-bumil" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-person-pregnant mr-1"></i> Ibu Hamil
+        </button>
+        <button onclick="setTab('balita')" id="tab-balita" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-baby mr-1"></i> Bayi & Balita
+        </button>
+        <button onclick="setTab('pus_kb')" id="tab-pus_kb" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-venus-mars mr-1"></i> PUS & KB
+        </button>
+        <button onclick="setTab('remaja')" id="tab-remaja" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-child-reaching mr-1"></i> Remaja
+        </button>
+        <button onclick="setTab('posbindu')" id="tab-posbindu" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-stethoscope mr-1"></i> Posbindu (15-59)
+        </button>
+        <button onclick="setTab('lansia')" id="tab-lansia" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-person-cane mr-1"></i> Lansia
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+        <div class="sm:col-span-6 relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-sm"></i>
+          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Cari Nama, NIK, No. KK, atau Pekerjaan..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+        </div>
+
+        <div class="sm:col-span-3">
+          <select id="filterRT" onchange="applyFilters()" class="w-full py-2 px-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+            <option value="">Semua Wilayah RT/RW</option>
+          </select>
+        </div>
+
+        <div class="sm:col-span-3">
+          <button onclick="exportToExcel()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg text-sm border border-slate-300 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-download text-teal-700"></i> Ekspor Laporan Excel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABEL DATA SASARAN DENGAN PAGINASI -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      
+      <!-- Pengaturan Jumlah Baris & Info -->
+      <div class="px-4 py-3 border-b border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2 text-slate-600 font-medium">
+          <span>Tampilkan</span>
+          <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="border border-slate-300 rounded px-2 py-1 bg-white font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+          <span>data per halaman</span>
+        </div>
+        <div id="paginationSummaryTop" class="text-slate-500 font-medium">Menampilkan 0 data</div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600">
+          <thead class="bg-slate-100 text-slate-700 text-xs uppercase font-bold tracking-wider border-b border-slate-200">
+            <tr>
+              <th class="py-3 px-3 text-center w-12">No</th>
+              <th class="py-3 px-3">Desa / RT/RW / KK</th>
+              <th class="py-3 px-3">Nama Sasaran & NIK</th>
+              <th class="py-3 px-3 text-center">JK / Usia</th>
+              <th class="py-3 px-3">Hub / Pekerjaan</th>
+              <th class="py-3 px-3">Status KIA & KB</th>
+              <th id="thAksi" class="py-3 px-3 text-center hidden">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="dataTableBody" class="divide-y divide-slate-200 text-xs sm:text-sm">
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl text-teal-600 mb-2"></i>
+                <p>Memuat data dari Firebase...</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- KONTROL PAGINASI & FOOTER -->
+      <div class="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-600 gap-3">
+        <div class="flex items-center gap-2">
+          <span id="recordCount">Menampilkan 0 data</span>
+          <span class="text-slate-300">&bull;</span>
+          <span id="footerDesaLabel">Wilayah: Desa Sampanahan Hilir</span>
+        </div>
+
+        <div class="flex items-center gap-1.5" id="paginationControls">
+          <!-- Tombol digenerate via Javascript -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL MATRIKS REKAPITULASI SASARAN KESEHATAN (DENGAN LOCK FREEZE COLUMN NAMA/DESA) -->
+  <div id="modalMatriks" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-2 sm:p-4">
+    <div id="modalMatriksContent" class="bg-white rounded-2xl max-w-7xl w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      
+      <!-- Header Modal -->
+      <div class="p-4 sm:p-5 bg-white border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 no-print">
+        <div>
+          <h3 class="font-extrabold text-base sm:text-lg text-slate-800 tracking-tight" id="matriksModalTitle">DATA PENDUDUK SELURUH WILAYAH PUSKESMAS</h3>
+          <p class="text-xs font-semibold text-teal-700 uppercase tracking-wider" id="matriksModalSubtitle">REKAPITULASI SASARAN KESEHATAN TAHUN 2026</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 border border-slate-300 shadow-sm">
+            <i class="fa-solid fa-print"></i> Cetak
+          </button>
+          <button onclick="exportMatriksToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-file-excel"></i> Ekspor Excel
+          </button>
+          <button onclick="closeModalMatriks()" class="text-slate-400 hover:text-slate-600 p-1 text-xl transition">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- KONTEN TABEL MATRIKS DENGAN HORIZONTAL SCROLL & FREEZE STICKY -->
+      <div class="p-3 sm:p-5 overflow-y-auto overflow-x-auto flex-1">
+        <div class="border border-slate-300 rounded-xl overflow-x-auto shadow-sm bg-white">
+          <table class="w-full text-xs text-center border-collapse whitespace-nowrap min-w-[1000px]">
+            <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] tracking-wider border-b-2 border-slate-300" id="matriksTableHead">
+              <!-- Header bertingkat dirender otomatis -->
+            </thead>
+            <tbody id="matriksTableBody" class="divide-y divide-slate-200 text-slate-700 text-xs">
+              <!-- Baris data dirender otomatis -->
+            </tbody>
+            <tfoot id="matriksTableFoot" class="bg-slate-100 font-extrabold text-slate-900 border-t-2 border-slate-300 text-xs">
+              <!-- Baris Jumlah Total -->
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center text-xs text-slate-500 gap-2 no-print">
+        <span>* Kolom nama wilayah terkunci (freeze), geser ke kanan untuk melihat rincian sasaran.</span>
+        <button onclick="closeModalMatriks()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LOGIN FIREBASE AUTH -->
+  <div id="modalLogin" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+      <div class="p-5 bg-teal-700 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-user-shield text-xl text-teal-200"></i>
+          <h3 class="font-bold text-base">Login Bidan / Admin</h3>
+        </div>
+        <button onclick="closeLoginModal()" class="text-teal-200 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Email Terdaftar</label>
+          <input type="email" id="loginEmail" required placeholder="bidan@puskesmas.id" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none">
+        </div>
+
+        <div id="loginErrorMsg" class="hidden p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg font-medium"></div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeLoginModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Batal</button>
+          <button type="submit" id="btnLoginSubmit" class="px-5 py-2 bg-teal-700 hover:bg-teal-600 text-white rounded-lg text-sm font-semibold shadow-sm transition">
+            Masuk
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL KELOLA DESA & SISTEM VERSI -->
+  <div id="modalKelolaDesa" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="p-5 bg-teal-700 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-gears text-xl text-teal-200"></i>
+          <h3 class="font-bold text-base">Kelola Desa & Sistem Versi</h3>
+        </div>
+        <button onclick="closeModalDesa()" class="text-teal-200 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-6 overflow-y-auto flex-1">
+        <!-- Kontrol Auto-Update Versi -->
+        <div class="p-4 bg-teal-50/70 border border-teal-200 rounded-xl space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-bold text-teal-900 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-code-branch text-teal-600"></i> Kontrol Versi Aplikasi (Auto-Update)
+            </h4>
+            <span class="text-[11px] font-mono bg-white px-2 py-0.5 rounded border border-teal-300 text-teal-800">Lokal: <strong id="modalLocalVer">v1.2.0</strong></span>
+          </div>
+          <p class="text-xs text-slate-600">Saat Anda menaikkan nomor versi di bawah ini, seluruh pengguna yang membuka aplikasi akan menerima notifikasi pembaruan.</p>
+          
+          <form onsubmit="updateServerVersion(event)" class="space-y-2 pt-1">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 uppercase mb-0.5">Versi Rilis</label>
+                <input type="text" id="inputVersionCode" required placeholder="v1.2.1" class="w-full border border-slate-300 rounded-lg p-2 text-xs font-mono">
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-600 uppercase mb-0.5">Catatan Perubahan (Changelog)</label>
+                <input type="text" id="inputVersionChangelog" placeholder="Penambahan freeze column lock pada matriks dan auto-check sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+              </div>
+            </div>
+            <div class="flex justify-end pt-1">
+              <button type="submit" class="bg-teal-700 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1">
+                <i class="fa-solid fa-bullhorn"></i> Publikasikan Versi Baru
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Master Desa -->
+        <div class="space-y-3">
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-map-location-dot text-teal-600"></i> Daftar Desa Binaan Puskesmas
+          </h4>
+          
+          <form onsubmit="tambahDesaBaru(event)" class="flex gap-2">
+            <input type="text" id="inputNamaDesaBaru" required placeholder="Nama Desa Baru (contoh: Desa Sukamaju)" class="flex-1 border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none">
+            <button type="submit" class="bg-teal-700 hover:bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1">
+              <i class="fa-solid fa-plus"></i> Tambah
+            </button>
+          </form>
+
+          <div class="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-slate-100 text-slate-700 text-xs uppercase font-bold">
+                <tr>
+                  <th class="p-2.5">Nama Desa</th>
+                  <th class="p-2.5 text-center w-20">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="listMasterDesaBody" class="divide-y divide-slate-200">
+                <!-- Render list desa -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button onclick="closeModalDesa()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FORM SASARAN (DENGAN TEMPAT & TANGGAL LAHIR TERPISAH) -->
+  <div id="modalForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="p-5 bg-teal-700 text-white flex justify-between items-center rounded-t-2xl">
+        <h3 id="modalTitle" class="font-bold text-base flex items-center gap-2">
+          <i class="fa-solid fa-user-pen"></i> Form Data Sasaran KIA / KB
+        </h3>
+        <button onclick="closeModal()" class="text-teal-200 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <form id="pendudukForm" onsubmit="saveData(event)" class="p-6 space-y-4">
+        <input type="hidden" id="formDocId">
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Wilayah Desa</label>
+            <select id="formDesa" required class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white font-medium">
+              <!-- Render opsi desa -->
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">RT/RW</label>
+            <input type="text" id="formRT" required placeholder="Contoh: 001/001 atau 1" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-medium">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nomor KK</label>
+            <input type="text" id="formNoKK" placeholder="16 Digit No. KK" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1 flex items-center justify-between">
+              <span>NIK (16 Digit)</span>
+              <span id="nikDetectBadge" class="hidden text-[10px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded font-normal border border-teal-200">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Terdeteksi Otomatis
+              </span>
+            </label>
+            <input type="text" id="formNIK" oninput="handleNIKInput(this.value)" placeholder="16 Digit NIK Sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nama Lengkap</label>
+            <input type="text" id="formNama" required placeholder="Nama Sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Jenis Kelamin</label>
+            <select id="formJK" required class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white">
+              <option value="L">Laki-laki (L)</option>
+              <option value="P">Perempuan (P)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Hub. Keluarga</label>
+            <input type="text" id="formHubungan" placeholder="KK, ISTERI, ANAK, dll" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1 flex items-center justify-between">
+              <span>Usia (Tahun / Bulan)</span>
+              <span id="usiaKetBadge" class="text-[10px] text-teal-700 font-bold">Otomatis</span>
+            </label>
+            <input type="text" id="formUsia" placeholder="Contoh: 28 atau 7 BULAN" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-medium bg-slate-50">
+          </div>
+        </div>
+
+        <!-- Kolom Tempat dan Tanggal Lahir Dipisah -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Tempat Lahir</label>
+            <input type="text" id="formTempatLahir" placeholder="Contoh: Kotabaru" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Tanggal Lahir</label>
+            <input type="date" id="formTglLahir" onchange="handleTglLahirChange(this.value)" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-medium bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Pekerjaan</label>
+            <input type="text" id="formPekerjaan" placeholder="IRT, PETANI, PNS, dll" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+          </div>
+        </div>
+
+        <!-- Status Sasaran KIA / KB -->
+        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+          <h4 class="text-xs font-bold text-teal-800 uppercase tracking-wider">Status Sasaran KIA & BKKBN</h4>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formPUS" class="rounded text-teal-600 focus:ring-teal-500"> PUS
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formWUS" class="rounded text-teal-600 focus:ring-teal-500"> WUS
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formBumil" class="rounded text-pink-600 focus:ring-pink-500"> Ibu Hamil
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formBalita" class="rounded text-amber-600 focus:ring-amber-500"> Bayi/Balita
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formRemaja" class="rounded text-indigo-600 focus:ring-indigo-500"> Remaja
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formPosbindu" class="rounded text-teal-600 focus:ring-teal-500"> Posbindu (15-59)
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formLansia" class="rounded text-purple-600 focus:ring-purple-500"> Lansia (>60 th)
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="form4T" class="rounded text-rose-600 focus:ring-rose-500"> Risiko 4T
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="formALKI" class="rounded text-rose-600 focus:ring-rose-500"> ALKI
+            </label>
+          </div>
+
+          <div class="pt-2">
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Metode KB (Bila Akseptor)</label>
+            <input type="text" id="formKB" placeholder="PIL, SUNTIK, IMPLAN, IUD, MOW, MOP, dll" class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-3">
+          <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Batal</button>
+          <button type="submit" class="px-5 py-2 bg-teal-700 hover:bg-teal-600 text-white rounded-lg text-sm font-semibold shadow-sm">Simpan Data</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SCRIPT LOGIC & FIREBASE -->
+  <script>
+    // ==========================================
+    // 0. AUTO-DETEKSI NIK & AUTO-CENTANG SASARAN
+    // ==========================================
+    function calculateAgeFromDate(birthDateObj) {
+      if (!birthDateObj || isNaN(birthDateObj.getTime())) return null;
+
+      const now = new Date();
+      let ageYears = now.getFullYear() - birthDateObj.getFullYear();
+      let m = now.getMonth() - birthDateObj.getMonth();
+      let d = now.getDate() - birthDateObj.getDate();
+
+      if (m < 0 || (m === 0 && d < 0)) {
+        ageYears--;
+      }
+
+      let totalMonths = (now.getFullYear() - birthDateObj.getFullYear()) * 12 + (now.getMonth() - birthDateObj.getMonth());
+      if (d < 0) {
+        totalMonths--;
+      }
+
+      let ageText = String(ageYears);
+      if (ageYears < 1) {
+        ageText = `${Math.max(1, totalMonths)} BULAN`;
+      }
+
+      return {
+        ageYears: ageYears,
+        totalMonths: totalMonths,
+        ageText: ageText
+      };
+    }
+
+    function applyAutoCheckStatus(ageYears, isFemale) {
+      document.getElementById('formBalita').checked = false;
+      document.getElementById('formRemaja').checked = false;
+      document.getElementById('formPosbindu').checked = false;
+      document.getElementById('formWUS').checked = false;
+      document.getElementById('formPUS').checked = false;
+      document.getElementById('formLansia').checked = false;
+      document.getElementById('form4T').checked = false;
+
+      const y = ageYears;
+
+      if (y <= 5) {
+        document.getElementById('formBalita').checked = true;
+      }
+
+      if (y >= 10 && y <= 18) {
+        document.getElementById('formRemaja').checked = true;
+      }
+
+      if (y >= 15 && y <= 59) {
+        document.getElementById('formPosbindu').checked = true;
+      }
+
+      if (isFemale && y >= 15 && y <= 49) {
+        document.getElementById('formWUS').checked = true;
+        document.getElementById('formPUS').checked = true;
+      }
+
+      if (y >= 60) {
+        document.getElementById('formLansia').checked = true;
+      }
+
+      if (isFemale && ((y >= 15 && y < 20) || (y > 35 && y <= 49))) {
+        document.getElementById('form4T').checked = true;
+      }
+    }
+
+    function parseNIK(nikRaw) {
+      const nik = String(nikRaw).replace(/\D/g, '').trim();
+      if (nik.length < 12) return null;
+
+      const rawDay = parseInt(nik.substring(6, 8));
+      const month = parseInt(nik.substring(8, 10));
+      const yearShort = parseInt(nik.substring(10, 12));
+
+      if (isNaN(rawDay) || isNaN(month) || isNaN(yearShort)) return null;
+      if (month < 1 || month > 12) return null;
+
+      let gender = "L";
+      let day = rawDay;
+      if (rawDay > 40) {
+        gender = "P";
+        day = rawDay - 40;
+      }
+      if (day < 1 || day > 31) return null;
+
+      const now = new Date();
+      const curYear = now.getFullYear();
+      const birthYear = (yearShort <= (curYear % 100)) ? (2000 + yearShort) : (1900 + yearShort);
+
+      const formattedDay = day < 10 ? '0' + day : day;
+      const formattedMonth = month < 10 ? '0' + month : month;
+      const birthDateISO = `${birthYear}-${formattedMonth}-${formattedDay}`;
+      const birthDateObj = new Date(birthYear, month - 1, day);
+
+      const ageCalc = calculateAgeFromDate(birthDateObj);
+      if (!ageCalc) return null;
+
+      return {
+        gender: gender,
+        birthDateISO: birthDateISO,
+        birthDateDisplay: `${formattedDay}/${formattedMonth}/${birthYear}`,
+        ageYears: ageCalc.ageYears,
+        totalMonths: ageCalc.totalMonths,
+        ageText: ageCalc.ageText
+      };
+    }
+
+    function handleNIKInput(val) {
+      const parsed = parseNIK(val);
+      const badge = document.getElementById('nikDetectBadge');
+      
+      if (parsed) {
+        badge.classList.remove('hidden');
+        document.getElementById('formJK').value = parsed.gender;
+        document.getElementById('formUsia').value = parsed.ageText;
+        document.getElementById('formTglLahir').value = parsed.birthDateISO;
+
+        const isFemale = (parsed.gender === 'P');
+        applyAutoCheckStatus(parsed.ageYears, isFemale);
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function handleTglLahirChange(val) {
+      if (!val) return;
+      const parts = val.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const ageCalc = calculateAgeFromDate(d);
+        if (ageCalc) {
+          document.getElementById('formUsia').value = ageCalc.ageText;
+          const isFemale = (document.getElementById('formJK').value === 'P');
+          applyAutoCheckStatus(ageCalc.ageYears, isFemale);
+        }
+      }
+    }
+
+    // ==========================================
+    // 1. SISTEM VERSI DINAMIS & AUTO-UPDATE ENGINE
+    // ==========================================
+    const DEFAULT_APP_VERSION = "v1.2.0";
+    let localAppVersion = localStorage.getItem('sibidan_app_version') || DEFAULT_APP_VERSION;
+    let pendingServerVersion = "";
+
+    function updateVersionLabels(ver) {
+      localAppVersion = ver;
+      localStorage.setItem('sibidan_app_version', ver);
+      document.getElementById('appVersionBadge').innerText = ver;
+      document.getElementById('footerVersionText').innerText = `SiBidan ${ver}`;
+      document.getElementById('modalLocalVer').innerText = ver;
+    }
+
+    // ==========================================
+    // 2. KONFIGURASI FIREBASE PROJECT
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDBmMLQzX6yQFGeqF46AZuPIUiNS5TuqAI",
+      authDomain: "bidandesapkmsampananahan.firebaseapp.com",
+      projectId: "bidandesapkmsampananahan",
+      storageBucket: "bidandesapkmsampananahan.firebasestorage.app",
+      messagingSenderId: "953309707729",
+      appId: "1:953309707729:web:158d2e388c7a8cd59bb4f0",
+      measurementId: "G-08H9EG64LY"
+    };
+
+    let auth, db;
+    let currentUser = null;
+    let allData = [];
+    let masterDesaList = [];
+    let currentTab = 'semua';
+    let activeDesa = 'ALL';
+
+    // State Paginasi
+    let currentPage = 1;
+    let pageSize = 25;
+    let filteredDataSet = [];
+
+    const defaultDesaData = [
+      { id: 'SAMPANAHAN_HILIR', nama: 'Desa Sampanahan Hilir' },
+      { id: 'SAMPANAHAN', nama: 'Desa Sampanahan' },
+      { id: 'PAPAAN', nama: 'Desa Papaan' },
+      { id: 'GUNUNG_BATU_BESAR', nama: 'Desa Gunung Batu Besar' },
+      { id: 'SUKAMAJU', nama: 'Desa Sukamaju' },
+      { id: 'BASAWANG', nama: 'Desa Basawang' },
+      { id: 'BANJARSARI', nama: 'Desa Banjarsari' },
+      { id: 'SEPAPAH', nama: 'Desa Sepapah' },
+      { id: 'RAMPA_MANUNGGUL', nama: 'Desa Rampa Manunggul' }
+    ];
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      document.getElementById('dbStatus').innerHTML = '<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-cloud"></i> Firebase Terhubung</span>';
+    } catch (e) {
+      console.error("Firebase init error:", e);
+      document.getElementById('dbStatus').innerHTML = '<span class="text-amber-600 font-semibold"><i class="fa-solid fa-circle-exclamation"></i> Menjalankan Mode Demo</span>';
+    }
+
+    function initAppVersionListener() {
+      if (!db) return;
+
+      db.collection("system_config").doc("app_info").onSnapshot((doc) => {
+        if (!doc.exists) {
+          db.collection("system_config").doc("app_info").set({
+            latestVersion: localAppVersion,
+            changelog: "Rilis stabil Sistem Informasi Bidan Desa Terpadu",
+            updatedAt: new Date().toISOString()
+          });
+          return;
+        }
+
+        const data = doc.data();
+        const serverVersion = data.latestVersion ? data.latestVersion.trim() : localAppVersion;
+        const changelog = data.changelog || "Pembaruan sistem dan perbaikan fitur";
+
+        document.getElementById('inputVersionCode').value = serverVersion;
+        document.getElementById('inputVersionChangelog').value = changelog;
+
+        if (serverVersion && serverVersion !== localAppVersion) {
+          pendingServerVersion = serverVersion;
+          document.getElementById('newVersionText').innerText = serverVersion;
+          document.getElementById('newVersionDesc').innerText = changelog;
+          document.getElementById('updateBanner').classList.remove('hidden');
+        } else {
+          document.getElementById('updateBanner').classList.add('hidden');
+        }
+      });
+    }
+
+    async function applyAppUpdate() {
+      const btn = document.getElementById('btnApplyUpdate');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memperbarui...';
+      btn.disabled = true;
+
+      if (pendingServerVersion) {
+        localStorage.setItem('sibidan_app_version', pendingServerVersion);
+      }
+
+      if ('caches' in window) {
+        try {
+          const names = await caches.keys();
+          for (let name of names) {
+            await caches.delete(name);
+          }
+        } catch (err) {
+          console.warn("Cache clean error:", err);
+        }
+      }
+
+      const newUrl = window.location.origin + window.location.pathname + '?v=' + encodeURIComponent(pendingServerVersion || Date.now());
+      window.location.replace(newUrl);
+    }
+
+    function dismissUpdateBanner() {
+      document.getElementById('updateBanner').classList.add('hidden');
+    }
+
+    async function updateServerVersion(e) {
+      e.preventDefault();
+      if (!currentUser) return alert("Hanya admin yang berhak mempublikasikan versi.");
+
+      const newVer = document.getElementById('inputVersionCode').value.trim();
+      const changelog = document.getElementById('inputVersionChangelog').value.trim();
+
+      if (!newVer) return;
+
+      if (!db) {
+        updateVersionLabels(newVer);
+        alert(`Mode Demo: Versi diubah menjadi ${newVer}`);
+        return;
+      }
+
+      try {
+        await db.collection("system_config").doc("app_info").set({
+          latestVersion: newVer,
+          changelog: changelog,
+          updatedBy: currentUser.email,
+          updatedAt: new Date().toISOString()
+        });
+        
+        updateVersionLabels(newVer);
+        alert(`Berhasil mempublikasikan ${newVer}. Seluruh pengguna akan menerima notifikasi update!`);
+      } catch (err) {
+        alert("Gagal mempublikasikan versi: " + err.message);
+      }
+    }
+
+    function initMasterDesaListener() {
+      if (!db) {
+        masterDesaList = [...defaultDesaData];
+        renderDesaDropdown();
+        return;
+      }
+
+      db.collection("master_desa").onSnapshot(async (snapshot) => {
+        if (snapshot.empty) {
+          const batch = db.batch();
+          defaultDesaData.forEach(d => {
+            const ref = db.collection("master_desa").doc(d.id);
+            batch.set(ref, { nama: d.nama, createdAt: new Date() });
+          });
+          await batch.commit();
+          return;
+        }
+
+        masterDesaList = [];
+        snapshot.forEach(doc => {
+          masterDesaList.push({ id: doc.id, nama: doc.data().nama || doc.id });
+        });
+        renderDesaDropdown();
+        renderMasterDesaTable();
+      });
+    }
+
+    function renderDesaDropdown() {
+      const selectPilih = document.getElementById('pilihDesa');
+      const selectForm = document.getElementById('formDesa');
+      const currentSelected = selectPilih.value || 'ALL';
+
+      let optionsHTML = '<option value="ALL">🌐 Semua Wilayah Puskesmas (Gabungan)</option>';
+      let formOptionsHTML = '';
+
+      masterDesaList.forEach(d => {
+        optionsHTML += `<option value="${d.id}">${d.nama}</option>`;
+        formOptionsHTML += `<option value="${d.id}">${d.nama}</option>`;
+      });
+
+      selectPilih.innerHTML = optionsHTML;
+      selectForm.innerHTML = formOptionsHTML;
+      selectPilih.value = currentSelected;
+      activeDesa = selectPilih.value;
+      updateRTFilterDropdown();
+    }
+
+    function updateRTFilterDropdown() {
+      const filterRT = document.getElementById('filterRT');
+      const curVal = filterRT.value;
+
+      const targetData = allData.filter(p => (activeDesa === 'ALL') || (getDesaClean(p) === activeDesa));
+      const uniqueRTs = [...new Set(targetData.map(p => String(p.rt).trim()).filter(x => x && x !== '-' && x !== '0'))];
+      uniqueRTs.sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
+
+      let optHTML = '<option value="">Semua Wilayah RT/RW</option>';
+      if (uniqueRTs.length > 0) {
+        uniqueRTs.forEach(rt => {
+          optHTML += `<option value="${rt}">${rt.startsWith('0') || rt.includes('/') ? 'RT/RW ' + rt : 'RT ' + rt}</option>`;
+        });
+      } else {
+        for (let i = 1; i <= 11; i++) {
+          optHTML += `<option value="${i}">RT 0${i}</option>`;
+        }
+      }
+
+      filterRT.innerHTML = optHTML;
+      filterRT.value = curVal;
+    }
+
+    if (auth) {
+      auth.onAuthStateChanged((user) => {
+        currentUser = user;
+        const roleText = document.getElementById('roleText');
+        const roleDot = document.getElementById('roleIndicatorDot');
+        const adminActions = document.getElementById('adminActions');
+        const btnLoginModal = document.getElementById('btnLoginModal');
+        const userProfile = document.getElementById('userProfile');
+        const userEmailText = document.getElementById('userEmailText');
+        const thAksi = document.getElementById('thAksi');
+
+        if (user) {
+          roleText.innerText = "Mode Petugas (Akses Penuh Terbuka)";
+          roleDot.className = "inline-flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse";
+          adminActions.classList.remove('hidden');
+          btnLoginModal.classList.add('hidden');
+          userProfile.classList.remove('hidden');
+          userEmailText.innerText = user.email;
+          thAksi.classList.remove('hidden');
+        } else {
+          roleText.innerText = "Mode Tamu (Privasi Terkunci)";
+          roleDot.className = "inline-flex h-3 w-3 rounded-full bg-amber-400";
+          adminActions.classList.add('hidden');
+          btnLoginModal.classList.remove('hidden');
+          userProfile.classList.add('hidden');
+          thAksi.classList.add('hidden');
+        }
+        applyFilters();
+      });
+    }
+
+    if (db) {
+      db.collection("penduduk_puskesmas").onSnapshot((snapshot) => {
+        allData = [];
+        snapshot.forEach((doc) => {
+          allData.push({ id: doc.id, ...doc.data() });
+        });
+        updateDashboard();
+        updateRTFilterDropdown();
+        applyFilters();
+      });
+    }
+
+    initMasterDesaListener();
+    initAppVersionListener();
+
+    // ==========================================
+    // 3. MODAL MATRIKS REKAPITULASI SASARAN KESEHATAN (FREEZE COLUMN NO & DESA)
+    // ==========================================
+    function openModalMatriks() {
+      const isGlobal = (activeDesa === 'ALL');
+      const namaDesa = isGlobal ? 'SELURUH WILAYAH PUSKESMAS' : getDesaNama(activeDesa).toUpperCase();
+      document.getElementById('matriksModalTitle').innerText = `DATA PENDUDUK ${namaDesa}`;
+      document.getElementById('matriksModalSubtitle').innerText = `REKAPITULASI SASARAN KESEHATAN TAHUN 2026`;
+      renderMatriksTable();
+      document.getElementById('modalMatriks').classList.remove('hidden');
+    }
+
+    function closeModalMatriks() {
+      document.getElementById('modalMatriks').classList.add('hidden');
+    }
+
+    function calculateMatriksData() {
+      const isGlobal = (activeDesa === 'ALL');
+      let targetData = allData;
+      if (!isGlobal) {
+        targetData = allData.filter(p => getDesaClean(p) === activeDesa);
+      }
+
+      let rowGroups = [];
+
+      if (isGlobal) {
+        rowGroups = masterDesaList.map((d, idx) => ({
+          key: d.id,
+          no: idx + 1,
+          label: d.nama
+        }));
+      } else {
+        const foundRTs = [...new Set(targetData.map(p => String(p.rt).trim()).filter(x => x && x !== '-' && x !== '0'))];
+        foundRTs.sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+          return numA - numB;
+        });
+
+        if (foundRTs.length === 0) {
+          for (let i = 1; i <= 9; i++) foundRTs.push(String(i));
+        }
+
+        rowGroups = foundRTs.map((rt, idx) => ({
+          key: rt,
+          no: idx + 1,
+          label: rt.includes('/') ? `RT ${rt.split('/')[0]}` : (rt.startsWith('0') ? `RT ${parseInt(rt)}` : `RT ${rt}`)
+        }));
+      }
+
+      const rowsData = rowGroups.map(group => {
+        const items = targetData.filter(p => {
+          return isGlobal ? (getDesaClean(p) === group.key) : (String(p.rt).trim() === group.key);
+        });
+
+        const kkSet = new Set();
+        let pnddk_l = 0, pnddk_p = 0;
+        let pus = 0, pus_4t = 0, wus = 0, kb = 0, bumil = 0;
+        let bayi = 0, balita = 0, prasekolah = 0, pra_lansia = 0;
+        let lansia_6070 = 0, lansia_70 = 0;
+        let remaja_l = 0, remaja_p = 0;
+
+        items.forEach(p => {
+          if (p.no_kk && p.no_kk.length > 5) kkSet.add(p.no_kk);
+
+          const isBulan = p.usia_text && String(p.usia_text).toLowerCase().includes('bulan');
+          const usiaNum = isBulan ? 0 : (parseInt(p.usia) || 0);
+
+          if (p.jk === 'L') pnddk_l++;
+          if (p.jk === 'P') pnddk_p++;
+
+          if (p.isPUS) {
+            pus++;
+            if (p.is4T) pus_4t++;
+          }
+          if (p.isWUS || (p.jk === 'P' && !isBulan && usiaNum >= 15 && usiaNum <= 49)) wus++;
+          if (p.kb && p.kb.trim() !== '' && p.kb.trim() !== '-') kb++;
+          if (p.isBumil) bumil++;
+
+          if (p.isBayi || (isBulan && parseInt(p.usia_text) <= 12) || (!isBulan && usiaNum < 1)) {
+            bayi++;
+          } else if (p.isBalita || isBulan || (!isBulan && usiaNum >= 1 && usiaNum < 5)) {
+            balita++;
+          } else if (!isBulan && usiaNum >= 5 && usiaNum <= 6) {
+            prasekolah++;
+          }
+
+          if (!isBulan) {
+            if (usiaNum >= 45 && usiaNum <= 59) pra_lansia++;
+            if (usiaNum >= 60 && usiaNum <= 70) lansia_6070++;
+            if (usiaNum > 70) lansia_70++;
+          }
+
+          if (p.isRemaja || (!isBulan && usiaNum >= 10 && usiaNum <= 18)) {
+            if (p.jk === 'L') remaja_l++;
+            if (p.jk === 'P') remaja_p++;
+          }
+        });
+
+        return {
+          no: group.no,
+          label: group.label,
+          pnddk_l,
+          pnddk_p,
+          pnddk_total: pnddk_l + pnddk_p,
+          jml_kk: kkSet.size,
+          pus,
+          pus_4t,
+          wus,
+          kb,
+          bumil,
+          bayi,
+          balita,
+          prasekolah,
+          pra_lansia,
+          lansia_6070,
+          lansia_70,
+          remaja_l,
+          remaja_p,
+          remaja_total: remaja_l + remaja_p
+        };
+      });
+
+      const totalSummary = {
+        pnddk_l: rowsData.reduce((acc, r) => acc + r.pnddk_l, 0),
+        pnddk_p: rowsData.reduce((acc, r) => acc + r.pnddk_p, 0),
+        pnddk_total: rowsData.reduce((acc, r) => acc + r.pnddk_total, 0),
+        jml_kk: rowsData.reduce((acc, r) => acc + r.jml_kk, 0),
+        pus: rowsData.reduce((acc, r) => acc + r.pus, 0),
+        pus_4t: rowsData.reduce((acc, r) => acc + r.pus_4t, 0),
+        wus: rowsData.reduce((acc, r) => acc + r.wus, 0),
+        kb: rowsData.reduce((acc, r) => acc + r.kb, 0),
+        bumil: rowsData.reduce((acc, r) => acc + r.bumil, 0),
+        bayi: rowsData.reduce((acc, r) => acc + r.bayi, 0),
+        balita: rowsData.reduce((acc, r) => acc + r.balita, 0),
+        prasekolah: rowsData.reduce((acc, r) => acc + r.prasekolah, 0),
+        pra_lansia: rowsData.reduce((acc, r) => acc + r.pra_lansia, 0),
+        lansia_6070: rowsData.reduce((acc, r) => acc + r.lansia_6070, 0),
+        lansia_70: rowsData.reduce((acc, r) => acc + r.lansia_70, 0),
+        remaja_l: rowsData.reduce((acc, r) => acc + r.remaja_l, 0),
+        remaja_p: rowsData.reduce((acc, r) => acc + r.remaja_p, 0),
+        remaja_total: rowsData.reduce((acc, r) => acc + r.remaja_total, 0)
+      };
+
+      return { isGlobal, rowsData, totalSummary };
+    }
+
+    function renderMatriksTable() {
+      const { isGlobal, rowsData, totalSummary } = calculateMatriksData();
+      const thead = document.getElementById('matriksTableHead');
+      const tbody = document.getElementById('matriksTableBody');
+      const tfoot = document.getElementById('matriksTableFoot');
+
+      const wilayahColTitle = isGlobal ? 'DESA' : 'DESA / RT';
+
+      thead.innerHTML = `
+        <tr class="divide-x divide-slate-200">
+          <th rowspan="2" class="p-2.5 freeze-col-no bg-slate-100 border-r border-slate-300">NO</th>
+          <th rowspan="2" class="p-2.5 freeze-col-label bg-slate-100 text-left border-r-2 border-slate-300">${wilayahColTitle}</th>
+          <th colspan="3" class="p-1.5 bg-blue-50/70 text-blue-900 border-b border-slate-200 min-w-[130px]">JMLH PNDDK</th>
+          <th rowspan="2" class="p-2 min-w-[70px]">JMLH KK</th>
+          <th rowspan="2" class="p-2 min-w-[60px]">PUS</th>
+          <th rowspan="2" class="p-2 min-w-[65px]">PUS 4T</th>
+          <th rowspan="2" class="p-2 min-w-[60px]">WUS</th>
+          <th rowspan="2" class="p-2 min-w-[60px]">KB</th>
+          <th rowspan="2" class="p-2 text-emerald-800 bg-emerald-50/50 min-w-[80px]">IBU HAMIL</th>
+          <th rowspan="2" class="p-2 min-w-[55px]">BAYI</th>
+          <th rowspan="2" class="p-2 min-w-[60px]">BALITA</th>
+          <th rowspan="2" class="p-2 min-w-[75px]">PRASEKOLAH</th>
+          <th rowspan="2" class="p-2 min-w-[75px]">PRA LANSIA</th>
+          <th rowspan="2" class="p-2 min-w-[80px]">LANSIA 60-70</th>
+          <th rowspan="2" class="p-2 min-w-[75px]">LANSIA >70</th>
+          <th colspan="3" class="p-1.5 bg-indigo-50/70 text-indigo-900 border-b border-slate-200 min-w-[130px]">REMAJA</th>
+        </tr>
+        <tr class="divide-x divide-slate-200 text-[10px] bg-slate-50">
+          <th class="p-1 w-9 text-blue-600 font-bold">L</th>
+          <th class="p-1 w-9 text-pink-600 font-bold">P</th>
+          <th class="p-1 w-11 font-extrabold text-slate-900">TOTAL</th>
+          <th class="p-1 w-9 text-blue-600 font-bold">L</th>
+          <th class="p-1 w-9 text-pink-600 font-bold">P</th>
+          <th class="p-1 w-11 font-extrabold text-slate-900">TOTAL</th>
+        </tr>
+      `;
+
+      tbody.innerHTML = rowsData.map(r => `
+        <tr class="hover:bg-slate-50 transition divide-x divide-slate-200">
+          <td class="p-2.5 text-slate-400 font-medium freeze-col-no bg-white border-r border-slate-200">${r.no}</td>
+          <td class="p-2.5 font-bold text-slate-800 text-left freeze-col-label bg-white border-r-2 border-slate-300 truncate">${r.label}</td>
+          <td class="p-2 text-blue-600 font-semibold">${r.pnddk_l}</td>
+          <td class="p-2 text-pink-600 font-semibold">${r.pnddk_p}</td>
+          <td class="p-2 font-extrabold text-slate-900 bg-slate-50/50">${r.pnddk_total}</td>
+          <td class="p-2 font-medium">${r.jml_kk}</td>
+          <td class="p-2">${r.pus}</td>
+          <td class="p-2 text-rose-700 font-semibold">${r.pus_4t}</td>
+          <td class="p-2">${r.wus}</td>
+          <td class="p-2">${r.kb}</td>
+          <td class="p-2 font-bold text-emerald-700 bg-emerald-50/40">${r.bumil}</td>
+          <td class="p-2">${r.bayi}</td>
+          <td class="p-2 font-medium">${r.balita}</td>
+          <td class="p-2">${r.prasekolah}</td>
+          <td class="p-2">${r.pra_lansia}</td>
+          <td class="p-2">${r.lansia_6070}</td>
+          <td class="p-2">${r.lansia_70}</td>
+          <td class="p-2 text-blue-600 font-medium">${r.remaja_l}</td>
+          <td class="p-2 text-pink-600 font-medium">${r.remaja_p}</td>
+          <td class="p-2 font-extrabold text-slate-900 bg-slate-50/50">${r.remaja_total}</td>
+        </tr>
+      `).join('');
+
+      tfoot.innerHTML = `
+        <tr class="divide-x divide-slate-300">
+          <td class="p-2.5 font-extrabold text-slate-900 uppercase freeze-col-no bg-slate-100 border-r border-slate-300">#</td>
+          <td class="p-2.5 font-extrabold text-slate-900 uppercase text-left freeze-col-label bg-slate-100 border-r-2 border-slate-300">JUMLAH TOTAL</td>
+          <td class="p-2 text-blue-700 font-extrabold">${totalSummary.pnddk_l}</td>
+          <td class="p-2 text-pink-700 font-extrabold">${totalSummary.pnddk_p}</td>
+          <td class="p-2 font-black text-slate-900 bg-slate-200/60">${totalSummary.pnddk_total}</td>
+          <td class="p-2 font-extrabold">${totalSummary.jml_kk}</td>
+          <td class="p-2 font-extrabold">${totalSummary.pus}</td>
+          <td class="p-2 font-extrabold text-rose-800">${totalSummary.pus_4t}</td>
+          <td class="p-2 font-extrabold">${totalSummary.wus}</td>
+          <td class="p-2 font-extrabold">${totalSummary.kb}</td>
+          <td class="p-2 font-black text-emerald-800 bg-emerald-100/60">${totalSummary.bumil}</td>
+          <td class="p-2 font-extrabold">${totalSummary.bayi}</td>
+          <td class="p-2 font-extrabold">${totalSummary.balita}</td>
+          <td class="p-2 font-extrabold">${totalSummary.prasekolah}</td>
+          <td class="p-2 font-extrabold">${totalSummary.pra_lansia}</td>
+          <td class="p-2 font-extrabold">${totalSummary.lansia_6070}</td>
+          <td class="p-2 font-extrabold">${totalSummary.lansia_70}</td>
+          <td class="p-2 text-blue-700 font-extrabold">${totalSummary.remaja_l}</td>
+          <td class="p-2 text-pink-700 font-extrabold">${totalSummary.remaja_p}</td>
+          <td class="p-2 font-black text-slate-900 bg-slate-200/60">${totalSummary.remaja_total}</td>
+        </tr>
+      `;
+    }
+
+    function autoFitColumns(worksheet, jsonData) {
+      if (!jsonData || jsonData.length === 0) return;
+      const keys = Object.keys(jsonData[0]);
+      const colWidths = keys.map(key => {
+        let maxLen = String(key).length;
+        jsonData.forEach(row => {
+          const valStr = row[key] ? String(row[key]) : '';
+          if (valStr.length > maxLen) {
+            maxLen = valStr.length;
+          }
+        });
+        return { wch: Math.max(maxLen + 3, 7) };
+      });
+      worksheet['!cols'] = colWidths;
+    }
+
+    function exportMatriksToExcel() {
+      const { rowsData, totalSummary } = calculateMatriksData();
+      const isGlobal = (activeDesa === 'ALL');
+      const namaDesa = isGlobal ? 'Semua_Puskesmas' : activeDesa;
+
+      const excelRows = rowsData.map(r => ({
+        "NO": r.no,
+        "DESA / RT": r.label,
+        "PNDDK (L)": r.pnddk_l,
+        "PNDDK (P)": r.pnddk_p,
+        "TOTAL PNDDK": r.pnddk_total,
+        "JMLH KK": r.jml_kk,
+        "PUS": r.pus,
+        "PUS 4T": r.pus_4t,
+        "WUS": r.wus,
+        "KB": r.kb,
+        "IBU HAMIL": r.bumil,
+        "BAYI": r.bayi,
+        "BALITA": r.balita,
+        "PRASEKOLAH": r.prasekolah,
+        "PRA LANSIA": r.pra_lansia,
+        "LANSIA 60-70": r.lansia_6070,
+        "LANSIA >70": r.lansia_70,
+        "REMAJA (L)": r.remaja_l,
+        "REMAJA (P)": r.remaja_p,
+        "TOTAL REMAJA": r.remaja_total
+      }));
+
+      excelRows.push({
+        "NO": "",
+        "DESA / RT": "JUMLAH TOTAL",
+        "PNDDK (L)": totalSummary.pnddk_l,
+        "PNDDK (P)": totalSummary.pnddk_p,
+        "TOTAL PNDDK": totalSummary.pnddk_total,
+        "JMLH KK": totalSummary.jml_kk,
+        "PUS": totalSummary.pus,
+        "PUS 4T": totalSummary.pus_4t,
+        "WUS": totalSummary.wus,
+        "KB": totalSummary.kb,
+        "IBU HAMIL": totalSummary.bumil,
+        "BAYI": totalSummary.bayi,
+        "BALITA": totalSummary.balita,
+        "PRASEKOLAH": totalSummary.prasekolah,
+        "PRA LANSIA": totalSummary.pra_lansia,
+        "LANSIA 60-70": totalSummary.lansia_6070,
+        "LANSIA >70": totalSummary.lansia_70,
+        "REMAJA (L)": totalSummary.remaja_l,
+        "REMAJA (P)": totalSummary.remaja_p,
+        "TOTAL REMAJA": totalSummary.remaja_total
+      });
+
+      const ws = XLSX.utils.json_to_sheet(excelRows);
+      autoFitColumns(ws, excelRows);
+      
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "REKAPAN TOTAL");
+      XLSX.writeFile(wb, `REKAP_SASARAN_${namaDesa}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // ==========================================
+    // 4. RESET DATA DESA AKTIF
+    // ==========================================
+    async function hapusDataDesaAktif() {
+      if (!currentUser) return alert("Hanya admin/petugas yang berhak mereset data.");
+      
+      const namaDesa = activeDesa === 'ALL' ? 'SELURUH WILAYAH PUSKESMAS' : getDesaNama(activeDesa);
+      const konfirmasi = confirm(`PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data sasaran di ${namaDesa}?\n\nData yang dihapus dari Firebase tidak dapat dikembalikan.`);
+      if (!konfirmasi) return;
+
+      const statusEl = document.getElementById('dbStatus');
+      statusEl.innerHTML = '<span class="text-rose-600 font-semibold"><i class="fa-solid fa-spinner fa-spin"></i> Menghapus data...</span>';
+
+      try {
+        const snapshot = await db.collection("penduduk_puskesmas").get();
+        let batch = db.batch();
+        let count = 0;
+        let deletedCount = 0;
+
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const desaCocok = (activeDesa === 'ALL') || (getDesaClean(data) === activeDesa);
+          
+          if (desaCocok) {
+            batch.delete(doc.ref);
+            count++;
+            deletedCount++;
+            if (count % 400 === 0) {
+              await batch.commit();
+              batch = db.batch();
+            }
+          }
+        }
+
+        await batch.commit();
+        alert(`Sukses! Sebanyak ${deletedCount} data penduduk di ${namaDesa} berhasil dibersihkan dari Firebase.`);
+      } catch (err) {
+        alert("Gagal menghapus data: " + err.message);
+      } finally {
+        statusEl.innerHTML = '<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-cloud"></i> Firebase Terhubung</span>';
+      }
+    }
+
+    // ==========================================
+    // 5. MANAJEMEN MASTER DESA & AUTH
+    // ==========================================
+    function openModalDesa() {
+      if (!currentUser) return alert("Hanya admin yang dapat mengelola sistem.");
+      renderMasterDesaTable();
+      document.getElementById('modalKelolaDesa').classList.remove('hidden');
+    }
+
+    function closeModalDesa() {
+      document.getElementById('modalKelolaDesa').classList.add('hidden');
+    }
+
+    function renderMasterDesaTable() {
+      const tbody = document.getElementById('listMasterDesaBody');
+      tbody.innerHTML = masterDesaList.map(d => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-2.5 font-medium text-slate-800">${d.nama}</td>
+          <td class="p-2.5 text-center">
+            <button onclick="hapusDesa('${d.id}', '${d.nama}')" class="text-rose-500 hover:text-rose-700 p-1 transition" title="Hapus Desa">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function tambahDesaBaru(e) {
+      e.preventDefault();
+      if (!currentUser) return alert("Hanya admin yang berhak menambah desa.");
+      
+      const input = document.getElementById('inputNamaDesaBaru');
+      const namaBaru = input.value.trim();
+      if (!namaBaru) return;
+
+      const idBaru = namaBaru.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+      if (!db) {
+        masterDesaList.push({ id: idBaru, nama: namaBaru });
+        renderDesaDropdown();
+        renderMasterDesaTable();
+        input.value = '';
+        return;
+      }
+
+      try {
+        await db.collection("master_desa").doc(idBaru).set({
+          nama: namaBaru,
+          createdAt: new Date().toISOString()
+        });
+        input.value = '';
+      } catch (err) {
+        alert("Gagal menambah desa: " + err.message);
+      }
+    }
+
+    async function hapusDesa(desaId, namaDesa) {
+      if (!currentUser) return alert("Hanya admin yang berhak menghapus desa.");
+      if (!confirm(`Hapus ${namaDesa} dari daftar desa binaan?`)) return;
+
+      if (!db) {
+        masterDesaList = masterDesaList.filter(d => d.id !== desaId);
+        renderDesaDropdown();
+        renderMasterDesaTable();
+        return;
+      }
+
+      try {
+        await db.collection("master_desa").doc(desaId).delete();
+      } catch (err) {
+        alert("Gagal menghapus desa: " + err.message);
+      }
+    }
+
+    function onDesaChange() {
+      activeDesa = document.getElementById('pilihDesa').value;
+      const footerLabel = document.getElementById('footerDesaLabel');
+      const d = masterDesaList.find(x => x.id === activeDesa);
+      footerLabel.innerText = activeDesa === 'ALL' ? "Wilayah: Seluruh Wilayah Puskesmas" : `Wilayah: ${d ? d.nama : activeDesa}`;
+      currentPage = 1;
+      updateDashboard();
+      updateRTFilterDropdown();
+      applyFilters();
+    }
+
+    function openLoginModal() {
+      document.getElementById('loginErrorMsg').classList.add('hidden');
+      document.getElementById('modalLogin').classList.remove('hidden');
+    }
+
+    function closeLoginModal() {
+      document.getElementById('modalLogin').classList.add('hidden');
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass = document.getElementById('loginPassword').value;
+      const btn = document.getElementById('btnLoginSubmit');
+      const errorMsg = document.getElementById('loginErrorMsg');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Masuk...';
+      errorMsg.classList.add('hidden');
+
+      if (!auth) {
+        alert("Firebase Auth belum aktif.");
+        btn.disabled = false;
+        btn.innerText = 'Masuk';
+        return;
+      }
+
+      try {
+        await auth.signInWithEmailAndPassword(email, pass);
+        closeLoginModal();
+      } catch (err) {
+        errorMsg.innerText = "Login gagal: " + err.message;
+        errorMsg.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Masuk';
+      }
+    }
+
+    async function handleLogout() {
+      if (confirm("Keluar dari akun petugas/bidan?")) {
+        if (auth) await auth.signOut();
+      }
+    }
+
+    function maskSensitive(val) {
+      if (!val) return '-';
+      const str = String(val);
+      if (str.length <= 8) return '******';
+      return str.substring(0, 6) + '******' + str.substring(str.length - 4);
+    }
+
+    function getDesaClean(d) {
+      return d.desa_id || (d.desa && d.desa.toUpperCase().includes('HILIR') ? 'SAMPANAHAN_HILIR' : 'SAMPANAHAN');
+    }
+
+    function getDesaNama(desaId) {
+      const found = masterDesaList.find(d => d.id === desaId);
+      return found ? found.nama : desaId;
+    }
+
+    // ==========================================
+    // 6. DASHBOARD & FILTERING DENGAN PAGINASI
+    // ==========================================
+    function updateDashboard() {
+      const filteredByDesa = allData.filter(p => {
+        if (activeDesa === 'ALL') return true;
+        return getDesaClean(p) === activeDesa;
+      });
+
+      const total = filteredByDesa.length;
+      let bumil = 0, balita = 0, kb = 0, risti = 0, lansia = 0;
+
+      filteredByDesa.forEach(p => {
+        const isBulan = p.usia_text && String(p.usia_text).toLowerCase().includes('bulan');
+        const usiaNum = isBulan ? 0 : (parseInt(p.usia) || 0);
+
+        if (p.isBumil) bumil++;
+        if (p.isBalita || isBulan || (!isBulan && usiaNum <= 5)) balita++;
+        if (p.kb && p.kb.trim() !== '' && p.kb.trim() !== '-') kb++;
+        if (p.is4T || p.isALKI) risti++;
+        if (!isBulan && (p.isLansia || usiaNum >= 60)) lansia++;
+      });
+
+      document.getElementById('statTotal').innerText = total;
+      document.getElementById('statBumil').innerText = bumil;
+      document.getElementById('statBalita').innerText = balita;
+      document.getElementById('statKB').innerText = kb;
+      document.getElementById('statRisti').innerText = risti;
+      document.getElementById('statLansia').innerText = lansia;
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      currentPage = 1;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-teal-700', 'text-white');
+        btn.classList.add('bg-slate-100', 'text-slate-600');
+      });
+      const activeBtn = document.getElementById(`tab-${tab}`);
+      if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-100', 'text-slate-600');
+        activeBtn.classList.add('bg-teal-700', 'text-white');
+      }
+      applyFilters();
+    }
+
+    function changePageSize(size) {
+      pageSize = parseInt(size) || 25;
+      currentPage = 1;
+      renderTableWithPagination();
+    }
+
+    function goToPage(page) {
+      currentPage = page;
+      renderTableWithPagination();
+    }
+
+    function applyFilters() {
+      const keyword = document.getElementById('searchInput').value.toLowerCase();
+      const rtFilter = document.getElementById('filterRT').value;
+
+      filteredDataSet = allData.filter(p => {
+        if (activeDesa !== 'ALL' && getDesaClean(p) !== activeDesa) return false;
+
+        const matchSearch = (
+          (p.nama && p.nama.toLowerCase().includes(keyword)) ||
+          (p.nik && p.nik.toLowerCase().includes(keyword)) ||
+          (p.no_kk && p.no_kk.toLowerCase().includes(keyword)) ||
+          (p.pekerjaan && p.pekerjaan.toLowerCase().includes(keyword)) ||
+          (p.rt && p.rt.toLowerCase().includes(keyword))
+        );
+
+        const matchRT = rtFilter === "" || String(p.rt).trim() === String(rtFilter).trim();
+
+        let matchTab = true;
+        const isBulan = p.usia_text && String(p.usia_text).toLowerCase().includes('bulan');
+        const usiaNum = isBulan ? 0 : (parseInt(p.usia) || 0);
+
+        if (currentTab === 'bumil') {
+          matchTab = !!p.isBumil;
+        } else if (currentTab === 'balita') {
+          matchTab = p.isBalita || isBulan || (!isBulan && usiaNum <= 5);
+        } else if (currentTab === 'pus_kb') {
+          matchTab = p.isPUS || (p.kb && p.kb !== '-');
+        } else if (currentTab === 'remaja') {
+          matchTab = p.isRemaja || (!isBulan && usiaNum >= 10 && usiaNum <= 18);
+        } else if (currentTab === 'posbindu') {
+          matchTab = p.isPosbindu || (!isBulan && usiaNum >= 15 && usiaNum <= 59);
+        } else if (currentTab === 'lansia') {
+          matchTab = !isBulan && (p.isLansia || usiaNum >= 60);
+        }
+
+        return matchSearch && matchRT && matchTab;
+      });
+
+      currentPage = 1;
+      renderTableWithPagination();
+    }
+
+    function renderTableWithPagination() {
+      const tbody = document.getElementById('dataTableBody');
+      const counter = document.getElementById('recordCount');
+      const topSummary = document.getElementById('paginationSummaryTop');
+      const paginationControls = document.getElementById('paginationControls');
+
+      const totalRecords = filteredDataSet.length;
+      const totalPages = Math.ceil(totalRecords / pageSize) || 1;
+
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, totalRecords);
+      const pageData = filteredDataSet.slice(startIndex, endIndex);
+
+      counter.innerText = `Menampilkan ${totalRecords === 0 ? 0 : (startIndex + 1)} - ${endIndex} dari total ${totalRecords} data`;
+      topSummary.innerText = `Halaman ${currentPage} dari ${totalPages} (${totalRecords} sasaran)`;
+
+      if (totalRecords === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">Tidak ada data sasaran di wilayah ini.</td></tr>`;
+        paginationControls.innerHTML = '';
+        return;
+      }
+
+      const isLogin = !!currentUser;
+
+      tbody.innerHTML = pageData.map((item, index) => {
+        let badges = [];
+        if (item.isBumil) badges.push('<span class="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Bumil</span>');
+        if (item.isBalita || (item.usia_text && String(item.usia_text).toLowerCase().includes('bulan'))) badges.push('<span class="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[11px] font-bold">Balita</span>');
+        if (item.kb && item.kb !== '-') badges.push(`<span class="bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded text-[11px] font-bold">KB: ${item.kb}</span>`);
+        
+        if (isLogin) {
+          if (item.is4T) badges.push('<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[11px] font-bold">4T</span>');
+          if (item.isALKI) badges.push('<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[11px] font-bold">ALKI</span>');
+        }
+
+        const displayedNoKK = isLogin ? (item.no_kk || '-') : maskSensitive(item.no_kk);
+        const displayedNIK = isLogin ? (item.nik || '-') : maskSensitive(item.nik);
+        const desaLabel = getDesaNama(getDesaClean(item));
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3 px-3 text-center text-slate-400">${startIndex + index + 1}</td>
+            <td class="py-3 px-3">
+              <div class="font-bold text-xs text-teal-800">${desaLabel}</div>
+              <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 mt-0.5 mb-1">${item.rt ? (item.rt.startsWith('0') || item.rt.includes('/') ? 'RT/RW ' + item.rt : 'RT ' + item.rt) : '-'}</span>
+              <div class="text-[11px] text-slate-400">KK: ${displayedNoKK}</div>
+            </td>
+            <td class="py-3 px-3 font-semibold text-slate-800">
+              ${item.nama}
+              <div class="text-[11px] text-slate-500 font-mono">NIK: ${displayedNIK}</div>
+              <div class="text-[11px] font-normal text-slate-400">${item.ttl || ''}</div>
+            </td>
+            <td class="py-3 px-3 text-center">
+              <span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold ${item.jk === 'P' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}">${item.jk || '-'}</span>
+              <div class="text-xs text-slate-600 mt-1 font-medium">${item.usia_text || item.usia || '-'}</div>
+            </td>
+            <td class="py-3 px-3">
+              <div class="font-medium text-slate-700">${item.hubungan || '-'}</div>
+              <div class="text-[11px] text-slate-400">${item.pekerjaan || '-'}</div>
+            </td>
+            <td class="py-3 px-3">
+              <div class="flex flex-wrap gap-1">${badges.length > 0 ? badges.join('') : '<span class="text-slate-400 text-xs">-</span>'}</div>
+            </td>
+            ${isLogin ? `
+              <td class="py-3 px-3 text-center">
+                <div class="flex items-center justify-center gap-2">
+                  <button onclick="editData('${item.id}')" class="p-1.5 text-teal-600 hover:bg-teal-50 rounded transition" title="Edit Data">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
+                  <button onclick="deleteData('${item.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition" title="Hapus Data">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </td>
+            ` : ''}
+          </tr>
+        `;
+      }).join('');
+
+      // Tombol Paginasi
+      let paginationHTML = `
+        <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-2.5 py-1.5 rounded border border-slate-300 bg-white font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+      `;
+
+      let startP = Math.max(1, currentPage - 2);
+      let endP = Math.min(totalPages, currentPage + 2);
+
+      if (startP > 1) {
+        paginationHTML += `<button onclick="goToPage(1)" class="px-3 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-semibold">1</button>`;
+        if (startP > 2) paginationHTML += `<span class="px-1 text-slate-400">...</span>`;
+      }
+
+      for (let p = startP; p <= endP; p++) {
+        paginationHTML += `
+          <button onclick="goToPage(${p})" class="px-3 py-1 rounded font-semibold border ${p === currentPage ? 'bg-teal-700 text-white border-teal-700 shadow-sm' : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-700'}">
+            ${p}
+          </button>
+        `;
+      }
+
+      if (endP < totalPages) {
+        if (endP < totalPages - 1) paginationHTML += `<span class="px-1 text-slate-400">...</span>`;
+        paginationHTML += `<button onclick="goToPage(${totalPages})" class="px-3 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-semibold">${totalPages}</button>`;
+      }
+
+      paginationHTML += `
+        <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2.5 py-1.5 rounded border border-slate-300 bg-white font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      `;
+
+      paginationControls.innerHTML = paginationHTML;
+    }
+
+    // ==========================================
+    // 7. CRUD DATA SASARAN
+    // ==========================================
+    function openModalTambah() {
+      if (!currentUser) return alert("Hanya petugas yang berhak menambah sasaran.");
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> Tambah Sasaran Baru';
+      document.getElementById('pendudukForm').reset();
+      document.getElementById('formDocId').value = '';
+      document.getElementById('nikDetectBadge').classList.add('hidden');
+      document.getElementById('formTempatLahir').value = '';
+      document.getElementById('formTglLahir').value = '';
+      document.getElementById('formDesa').value = (activeDesa !== 'ALL') ? activeDesa : (masterDesaList[0]?.id || 'SAMPANAHAN_HILIR');
+      document.getElementById('modalForm').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modalForm').classList.add('hidden');
+    }
+
+    function editData(id) {
+      if (!currentUser) return alert("Hanya petugas yang berhak mengedit sasaran.");
+      const item = allData.find(d => d.id === id);
+      if (!item) return;
+
+      document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-pen"></i> Edit Sasaran';
+      document.getElementById('formDocId').value = item.id;
+      document.getElementById('formDesa').value = getDesaClean(item);
+      document.getElementById('formRT').value = item.rt || '';
+      document.getElementById('formNoKK').value = item.no_kk || '';
+      document.getElementById('formNIK').value = item.nik || '';
+      document.getElementById('formNama').value = item.nama || '';
+      document.getElementById('formJK').value = item.jk || 'L';
+      document.getElementById('formHubungan').value = item.hubungan || '';
+      document.getElementById('formUsia').value = item.usia_text || item.usia || '';
+      document.getElementById('formPekerjaan').value = item.pekerjaan || '';
+      document.getElementById('formKB').value = item.kb || '';
+
+      let tempat = item.tempat_lahir || '';
+      let tglIso = item.tgl_lahir_iso || '';
+
+      if (!tempat && item.ttl) {
+        if (item.ttl.includes(',')) {
+          const ttlParts = item.ttl.split(',');
+          tempat = ttlParts[0].trim();
+        } else {
+          tempat = item.ttl.trim();
+        }
+      }
+
+      document.getElementById('formTempatLahir').value = tempat;
+      document.getElementById('formTglLahir').value = tglIso;
+
+      document.getElementById('formPUS').checked = !!item.isPUS;
+      document.getElementById('formWUS').checked = !!item.isWUS;
+      document.getElementById('formBumil').checked = !!item.isBumil;
+      document.getElementById('formBalita').checked = !!item.isBalita;
+      document.getElementById('formRemaja').checked = !!item.isRemaja;
+      document.getElementById('formPosbindu').checked = !!item.isPosbindu;
+      document.getElementById('formLansia').checked = !!item.isLansia;
+      document.getElementById('form4T').checked = !!item.is4T;
+      document.getElementById('formALKI').checked = !!item.isALKI;
+
+      document.getElementById('nikDetectBadge').classList.add('hidden');
+      document.getElementById('modalForm').classList.remove('hidden');
+    }
+
+    async function saveData(e) {
+      e.preventDefault();
+      if (!currentUser) return alert("Sesi login berakhir.");
+
+      const docId = document.getElementById('formDocId').value;
+      const desaVal = document.getElementById('formDesa').value;
+      const usiaVal = document.getElementById('formUsia').value.trim();
+      const nikClean = document.getElementById('formNIK').value.replace(/['",\s]/g, '').trim();
+      const namaClean = document.getElementById('formNama').value.trim();
+      const rtClean = document.getElementById('formRT').value.trim();
+      
+      const tempatLahirVal = document.getElementById('formTempatLahir').value.trim();
+      const tglLahirVal = document.getElementById('formTglLahir').value;
+
+      let formattedTgl = '';
+      if (tglLahirVal) {
+        const p = tglLahirVal.split('-');
+        if (p.length === 3) formattedTgl = `${p[2]}/${p[1]}/${p[0]}`;
+      }
+
+      let ttlClean = '';
+      if (tempatLahirVal && formattedTgl) {
+        ttlClean = `${tempatLahirVal}, ${formattedTgl}`;
+      } else {
+        ttlClean = tempatLahirVal || formattedTgl;
+      }
+
+      const isBulan = usiaVal.toLowerCase().includes('bulan');
+      const usiaNumeric = isBulan ? 0 : (parseInt(usiaVal) || 0);
+
+      const payload = {
+        desa_id: desaVal,
+        desa_nama: getDesaNama(desaVal),
+        rt: rtClean,
+        no_kk: document.getElementById('formNoKK').value.replace(/['",\s]/g, '').trim(),
+        nik: nikClean,
+        nama: namaClean,
+        jk: document.getElementById('formJK').value,
+        hubungan: document.getElementById('formHubungan').value.trim(),
+        usia: usiaNumeric,
+        usia_text: usiaVal,
+        tempat_lahir: tempatLahirVal,
+        tgl_lahir_iso: tglLahirVal,
+        ttl: ttlClean,
+        pekerjaan: document.getElementById('formPekerjaan').value.trim(),
+        kb: document.getElementById('formKB').value.trim(),
+        isPUS: document.getElementById('formPUS').checked,
+        isWUS: document.getElementById('formWUS').checked,
+        isBumil: document.getElementById('formBumil').checked,
+        isBalita: document.getElementById('formBalita').checked,
+        isRemaja: document.getElementById('formRemaja').checked,
+        isPosbindu: document.getElementById('formPosbindu').checked,
+        isLansia: document.getElementById('formLansia').checked,
+        is4T: document.getElementById('form4T').checked,
+        isALKI: document.getElementById('formALKI').checked,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (!db) {
+        if (docId) {
+          const idx = allData.findIndex(d => d.id === docId);
+          allData[idx] = { id: docId, ...payload };
+        } else {
+          allData.unshift({ id: 'demo_' + Date.now(), ...payload });
+        }
+        closeModal();
+        updateDashboard();
+        updateRTFilterDropdown();
+        applyFilters();
+        return;
+      }
+
+      try {
+        let targetId = docId;
+        if (!targetId) {
+          if (nikClean && nikClean.length >= 10 && !nikClean.startsWith('9999')) {
+            targetId = `${desaVal}_NIK_${nikClean}`;
+          } else {
+            const slugNama = namaClean.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+            const slugRT = rtClean.replace(/[^a-zA-Z0-9]/g, '_');
+            const slugTgl = ttlClean.replace(/[^a-zA-Z0-9]/g, '_');
+            targetId = `${desaVal}_RT${slugRT}_${slugNama}_${slugTgl}`;
+          }
+        }
+
+        await db.collection("penduduk_puskesmas").doc(targetId).set(payload, { merge: true });
+        closeModal();
+      } catch (err) {
+        alert("Gagal menyimpan data: " + err.message);
+      }
+    }
+
+    async function deleteData(id) {
+      if (!currentUser) return alert("Hanya petugas yang berhak menghapus data.");
+      if (!confirm("Hapus data sasaran ini?")) return;
+      if (!db) {
+        allData = allData.filter(d => d.id !== id);
+        updateDashboard();
+        updateRTFilterDropdown();
+        applyFilters();
+        return;
+      }
+      try {
+        await db.collection("penduduk_puskesmas").doc(id).delete();
+      } catch (err) {
+        alert("Gagal menghapus: " + err.message);
+      }
+    }
+
+    // ==========================================
+    // 8. IMPORT EXCEL AUTO-HEADER DETECTION
+    // ==========================================
+    function triggerExcelUpload() {
+      if (activeDesa === 'ALL') {
+        alert("Silakan pilih salah satu Desa tujuan di menu atas terlebih dahulu sebelum mengunggah file Excel.");
+        return;
+      }
+      document.getElementById('excelFileInput').click();
+    }
+
+    async function handleExcelUpload(event) {
+      if (!currentUser) {
+        alert("Hanya petugas yang berhak mengimpor data.");
+        event.target.value = '';
+        return;
+      }
+
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const namaDesaTarget = getDesaNama(activeDesa);
+      const statusEl = document.getElementById('dbStatus');
+      statusEl.innerHTML = `<span class="text-teal-700 font-semibold"><i class="fa-solid fa-spinner fa-spin"></i> Membaca data ${namaDesaTarget}...</span>`;
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          let batchData = [];
+          let uniqueKeys = new Set();
+
+          workbook.SheetNames.forEach(sheetName => {
+            const cleanSheetName = sheetName.toUpperCase().replace(/\s+/g, '');
+            if (!cleanSheetName.includes('RT') || cleanSheetName.includes('DATA') || cleanSheetName.includes('REKAP')) return;
+
+            const rtFromSheet = cleanSheetName.replace(/\D/g, '') || '1';
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+            let headerRowIdx = -1;
+            let colMap = {
+              rt: -1, no_kk: -1, nik: -1, nama: -1, jk: -1, hubungan: -1,
+              tempatLahir: -1, tglLahir: -1, usia: -1, pekerjaan: -1,
+              pus: -1, wus: -1, kb: -1, bumil: -1, bayi: -1, balita: -1,
+              pralansia: -1, lansia_6070: -1, lansia_70: -1, remaja: -1,
+              risti4T: -1, ristiALKI: -1, posbindu: -1
+            };
+
+            for (let r = 0; r < Math.min(6, json.length); r++) {
+              const row = json[r];
+              const rowStr = row.map(x => String(x).toUpperCase().trim()).join(' ');
+              
+              if (rowStr.includes('NIK') || rowStr.includes('NAMA')) {
+                headerRowIdx = r;
+                row.forEach((colVal, cIdx) => {
+                  const val = String(colVal).toUpperCase().trim();
+                  if (val.includes('RT/RW') || val === 'RT') colMap.rt = cIdx;
+                  else if (val.includes('NO KK') || val === 'KK') colMap.no_kk = cIdx;
+                  else if (val.includes('NIK')) colMap.nik = cIdx;
+                  else if (val.includes('NAMA')) colMap.nama = cIdx;
+                  else if (val === 'JK' || val.includes('KELAMIN')) colMap.jk = cIdx;
+                  else if (val.includes('HUBUNGAN')) colMap.hubungan = cIdx;
+                  else if (val.includes('TEMPAT LAHIR') || val.includes('TEMPAT')) colMap.tempatLahir = cIdx;
+                  else if (val.includes('TGL LAHIR') || val.includes('TANGGAL')) colMap.tglLahir = cIdx;
+                  else if (val.includes('USIA')) colMap.usia = cIdx;
+                  else if (val.includes('PEKERJAAN')) colMap.pekerjaan = cIdx;
+                  else if (val === 'PUS') colMap.pus = cIdx;
+                  else if (val === 'WUS') colMap.wus = cIdx;
+                  else if (val === 'KB') colMap.kb = cIdx;
+                  else if (val.includes('HAMIL') || val === 'BUMIL') colMap.bumil = cIdx;
+                  else if (val.includes('BAYI')) colMap.bayi = cIdx;
+                  else if (val.includes('BALITA')) colMap.balita = cIdx;
+                  else if (val.includes('45-60') || val.includes('PRA LANSIA') || val.includes('PRALANSIA')) colMap.pralansia = cIdx;
+                  else if (val.includes('60-70')) colMap.lansia_6070 = cIdx;
+                  else if (val.includes('>70') || val.includes('70 TH')) colMap.lansia_70 = cIdx;
+                  else if (val.includes('REMAJA')) colMap.remaja = cIdx;
+                  else if (val === '4T') colMap.risti4T = cIdx;
+                  else if (val === 'ALKI') colMap.ristiALKI = cIdx;
+                  else if (val.includes('POSBINDU') || val.includes('15-59') || val.includes('15-60')) colMap.posbindu = cIdx;
+                });
+                break;
+              }
+            }
+
+            if (colMap.nama === -1) colMap.nama = 5;
+            if (colMap.nik === -1) colMap.nik = 3;
+            if (colMap.no_kk === -1) colMap.no_kk = 2;
+            if (colMap.jk === -1) colMap.jk = 6;
+            if (colMap.hubungan === -1) colMap.hubungan = 7;
+            if (colMap.tempatLahir === -1) colMap.tempatLahir = 8;
+            if (colMap.tglLahir === -1) colMap.tglLahir = 9;
+            if (colMap.usia === -1) colMap.usia = 10;
+            if (colMap.pekerjaan === -1) colMap.pekerjaan = 14;
+
+            let currentRT = rtFromSheet;
+            let currentNoKK = '';
+
+            for (let r = headerRowIdx + 1; r < json.length; r++) {
+              const row = json[r];
+              if (!row || row.length === 0) continue;
+
+              const namaRaw = colMap.nama !== -1 && row[colMap.nama] !== undefined ? String(row[colMap.nama]).trim() : '';
+
+              if (!namaRaw || 
+                  namaRaw.toUpperCase().includes('NAMA') || 
+                  namaRaw === '0' ||
+                  namaRaw === '-' ||
+                  namaRaw.toUpperCase().includes('KABUPATEN') ||
+                  namaRaw.toUpperCase().includes('DESA') ||
+                  namaRaw.toUpperCase().includes('JUMLAH') ||
+                  namaRaw.toUpperCase().includes('LAKI')) {
+                continue;
+              }
+
+              const rowNoKK = colMap.no_kk !== -1 && row[colMap.no_kk] ? String(row[colMap.no_kk]).replace(/['",\s]/g, '').trim() : '';
+              if (rowNoKK && rowNoKK !== '-' && rowNoKK.length > 5) currentNoKK = rowNoKK;
+
+              const rowRT = colMap.rt !== -1 && row[colMap.rt] ? String(row[colMap.rt]).trim() : '';
+              if (rowRT && rowRT !== '-' && rowRT !== '0') {
+                currentRT = rowRT;
+              }
+
+              const nik = colMap.nik !== -1 && row[colMap.nik] ? String(row[colMap.nik]).replace(/['",\s]/g, '').trim() : '';
+              const jk = colMap.jk !== -1 && row[colMap.jk] ? String(row[colMap.jk]).trim().toUpperCase() : '';
+              const hubungan = colMap.hubungan !== -1 && row[colMap.hubungan] ? String(row[colMap.hubungan]).trim() : '';
+              const tempatLahir = colMap.tempatLahir !== -1 && row[colMap.tempatLahir] ? String(row[colMap.tempatLahir]).trim() : '';
+              const tglLahir = colMap.tglLahir !== -1 && row[colMap.tglLahir] ? String(row[colMap.tglLahir]).trim() : '';
+              const usiaRaw = colMap.usia !== -1 && row[colMap.usia] ? String(row[colMap.usia]).trim() : '';
+              const pekerjaan = colMap.pekerjaan !== -1 && row[colMap.pekerjaan] ? String(row[colMap.pekerjaan]).trim() : '';
+
+              const getVal = (idx) => (idx !== -1 && row[idx]) ? String(row[idx]).trim() : '';
+
+              const pusVal = getVal(colMap.pus);
+              const wusVal = getVal(colMap.wus);
+              const kbVal = getVal(colMap.kb);
+              const bumilVal = getVal(colMap.bumil);
+              const bayiVal = getVal(colMap.bayi);
+              const balitaVal = getVal(colMap.balita);
+              const lansia6070 = getVal(colMap.lansia_6070);
+              const lansia70 = getVal(colMap.lansia_70);
+              const praLansia = getVal(colMap.pralansia);
+              const remajaVal = getVal(colMap.remaja);
+              const risti4T = getVal(colMap.risti4T);
+              const ristiALKI = getVal(colMap.ristiALKI);
+              const posbinduVal = getVal(colMap.posbindu);
+
+              const isBulanFromExcel = usiaRaw.toLowerCase().includes('bulan');
+              const usiaNumericExcel = isBulanFromExcel ? 0 : (parseInt(usiaRaw) || 0);
+
+              const isPUS = pusVal !== '' && pusVal !== '-' && pusVal !== '0';
+              const isWUS = wusVal !== '' && wusVal !== '-' && wusVal !== '0';
+              const isBumil = bumilVal !== '' && bumilVal !== '-' && bumilVal !== '0';
+              const isBayi = bayiVal !== '' && bayiVal !== '-' && bayiVal !== '0';
+              const isBalita = (balitaVal !== '' && balitaVal !== '-' && balitaVal !== '0') || isBayi || isBulanFromExcel || (!isBulanFromExcel && usiaNumericExcel <= 5);
+              const isLansia = !isBulanFromExcel && ((lansia6070 !== '' && lansia6070 !== '-') || (lansia70 !== '' && lansia70 !== '-') || (usiaNumericExcel >= 60));
+              const isRemaja = (remajaVal !== '' && remajaVal !== '-') || (!isBulanFromExcel && usiaNumericExcel >= 10 && usiaNumericExcel <= 18);
+              const is4T = risti4T !== '' && risti4T !== '-' && risti4T !== '0';
+              const isALKI = ristiALKI !== '' && ristiALKI !== '-' && ristiALKI !== '0';
+              const isPosbindu = posbinduVal !== '' && posbinduVal !== '-' && posbinduVal !== '0';
+              let cleanKB = (kbVal && kbVal !== '-' && kbVal !== '0') ? kbVal : '';
+
+              let docId = '';
+              if (nik && nik.length >= 10 && !nik.startsWith('9999')) {
+                docId = `${activeDesa}_NIK_${nik}`;
+              } else {
+                const slugNama = namaRaw.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                const slugRT = String(currentRT).replace(/[^a-zA-Z0-9]/g, '_');
+                const slugTgl = tglLahir.replace(/[^a-zA-Z0-9]/g, '_');
+                docId = `${activeDesa}_RT${slugRT}_${slugNama}_${slugTgl}`;
+              }
+
+              if (uniqueKeys.has(docId)) continue;
+              uniqueKeys.add(docId);
+
+              batchData.push({
+                docId: docId,
+                desa_id: activeDesa,
+                desa_nama: namaDesaTarget,
+                rt: String(currentRT),
+                no_kk: currentNoKK,
+                nik: nik,
+                nama: namaRaw,
+                jk: jk,
+                hubungan: hubungan,
+                tempat_lahir: tempatLahir,
+                ttl: tempatLahir ? (tglLahir ? `${tempatLahir}, ${tglLahir}` : tempatLahir) : tglLahir,
+                usia_text: usiaRaw,
+                usia: usiaNumericExcel,
+                pekerjaan: pekerjaan,
+                isPUS: isPUS,
+                isWUS: isWUS,
+                kb: cleanKB,
+                isBumil: isBumil,
+                isBalita: isBalita,
+                isRemaja: isRemaja,
+                isLansia: isLansia,
+                is4T: is4T,
+                isALKI: isALKI,
+                isPosbindu: isPosbindu,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          });
+
+          if (batchData.length === 0) {
+            alert("Tidak ditemukan baris data yang valid.");
+            applyFilters();
+            return;
+          }
+
+          const konfirmasi = confirm(`Ditemukan ${batchData.length} data sasaran dari file Excel.\n\nData akan dialokasikan ke: ${namaDesaTarget}.\n\nLanjutkan sinkronisasi?`);
+          if (!konfirmasi) {
+            applyFilters();
+            return;
+          }
+
+          if (db) {
+            const CHUNK_SIZE = 400;
+            let totalProcessed = 0;
+
+            for (let i = 0; i < batchData.length; i += CHUNK_SIZE) {
+              const chunk = batchData.slice(i, i + CHUNK_SIZE);
+              let batch = db.batch();
+
+              chunk.forEach(item => {
+                const docRef = db.collection("penduduk_puskesmas").doc(item.docId);
+                const { docId, ...dataToSave } = item;
+                batch.set(docRef, dataToSave, { merge: true });
+              });
+
+              await batch.commit();
+              totalProcessed += chunk.length;
+              statusEl.innerHTML = `<span class="text-teal-700 font-semibold"><i class="fa-solid fa-spinner fa-spin"></i> Sinkronisasi ${namaDesaTarget}... (${totalProcessed}/${batchData.length})</span>`;
+            }
+
+            alert(`Sukses! ${batchData.length} data ${namaDesaTarget} berhasil tersimpan ke Firebase.`);
+          } else {
+            allData = batchData.map(d => ({ id: d.docId, ...d }));
+            updateDashboard();
+            updateRTFilterDropdown();
+            applyFilters();
+            alert(`Mode Demo: ${batchData.length} data berhasil dimuat.`);
+          }
+
+        } catch (err) {
+          console.error("Error import:", err);
+          alert("Gagal mengimpor: " + err.message);
+        } finally {
+          event.target.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // ==========================================
+    // 9. EKSPOR LAPORAN MULTI-SHEET LENGKAP & AUTO-WIDTH
+    // ==========================================
+    function exportToExcel() {
+      const isLogin = !!currentUser;
+      const isGlobal = (activeDesa === 'ALL');
+      const namaDesa = isGlobal ? 'Semua_Puskesmas' : activeDesa;
+
+      let dataset = allData;
+      if (!isGlobal) {
+        dataset = allData.filter(p => getDesaClean(p) === activeDesa);
+      }
+
+      if (dataset.length === 0) {
+        alert("Tidak ada data untuk diekspor pada wilayah yang dipilih.");
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+
+      const { rowsData, totalSummary } = calculateMatriksData();
+      const excelRows = rowsData.map(r => ({
+        "NO": r.no,
+        "DESA / RT": r.label,
+        "PNDDK (L)": r.pnddk_l,
+        "PNDDK (P)": r.pnddk_p,
+        "TOTAL PNDDK": r.pnddk_total,
+        "JMLH KK": r.jml_kk,
+        "PUS": r.pus,
+        "PUS 4T": r.pus_4t,
+        "WUS": r.wus,
+        "KB": r.kb,
+        "IBU HAMIL": r.bumil,
+        "BAYI": r.bayi,
+        "BALITA": r.balita,
+        "PRASEKOLAH": r.prasekolah,
+        "PRA LANSIA": r.pra_lansia,
+        "LANSIA 60-70": r.lansia_6070,
+        "LANSIA >70": r.lansia_70,
+        "REMAJA (L)": r.remaja_l,
+        "REMAJA (P)": r.remaja_p,
+        "TOTAL REMAJA": r.remaja_total
+      }));
+
+      excelRows.push({
+        "NO": "",
+        "DESA / RT": "JUMLAH TOTAL",
+        "PNDDK (L)": totalSummary.pnddk_l,
+        "PNDDK (P)": totalSummary.pnddk_p,
+        "TOTAL PNDDK": totalSummary.pnddk_total,
+        "JMLH KK": totalSummary.jml_kk,
+        "PUS": totalSummary.pus,
+        "PUS 4T": totalSummary.pus_4t,
+        "WUS": totalSummary.wus,
+        "KB": totalSummary.kb,
+        "IBU HAMIL": totalSummary.bumil,
+        "BAYI": totalSummary.bayi,
+        "BALITA": totalSummary.balita,
+        "PRASEKOLAH": totalSummary.prasekolah,
+        "PRA LANSIA": totalSummary.pra_lansia,
+        "LANSIA 60-70": totalSummary.lansia_6070,
+        "LANSIA >70": totalSummary.lansia_70,
+        "REMAJA (L)": totalSummary.remaja_l,
+        "REMAJA (P)": totalSummary.remaja_p,
+        "TOTAL REMAJA": totalSummary.remaja_total
+      });
+
+      const wsRekap = XLSX.utils.json_to_sheet(excelRows);
+      autoFitColumns(wsRekap, excelRows);
+      XLSX.utils.book_append_sheet(wb, wsRekap, "REKAPAN TOTAL");
+
+      if (!isGlobal) {
+        const uniqueRTs = [...new Set(dataset.map(p => String(p.rt).trim()).filter(x => x && x !== '-' && x !== '0'))];
+        uniqueRTs.sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+          return numA - numB;
+        });
+
+        uniqueRTs.forEach(rtNomor => {
+          const wargaRT = dataset.filter(p => String(p.rt).trim() === String(rtNomor));
+          if (wargaRT.length > 0) {
+            const rowsRT = wargaRT.map((d, idx) => ({
+              "NO": idx + 1,
+              "RT/RW": d.rt,
+              "WILAYAH DESA": getDesaNama(getDesaClean(d)),
+              "NO KK": isLogin ? d.no_kk : maskSensitive(d.no_kk),
+              "NIK": isLogin ? d.nik : maskSensitive(d.nik),
+              "NAMA ANGGOTA": d.nama,
+              "JENIS KELAMIN": d.jk,
+              "HUBUNGAN": d.hubungan,
+              "TEMPAT / TGL LAHIR": d.ttl,
+              "USIA/th/BLN": d.usia_text || d.usia,
+              "PEKERJAAN": d.pekerjaan,
+              "PUS": d.isPUS ? 1 : "",
+              "WUS": d.isWUS ? 1 : "",
+              "KB": d.kb || "",
+              "IBU HAMIL": d.isBumil ? 1 : "",
+              "BAYI / BALITA": d.isBalita ? 1 : "",
+              "REMAJA": d.isRemaja ? 1 : "",
+              "POSBINDU (15-59)": d.isPosbindu ? 1 : "",
+              "LANSIA": d.isLansia ? 1 : "",
+              "4T": isLogin ? (d.is4T ? 1 : "") : "Terkunci",
+              "ALKI": isLogin ? (d.isALKI ? 1 : "") : "Terkunci"
+            }));
+            const wsRT = XLSX.utils.json_to_sheet(rowsRT);
+            autoFitColumns(wsRT, rowsRT);
+            const sheetTitle = (rtNomor.includes('/') ? `RT ${rtNomor.split('/')[0]}` : `RT ${rtNomor}`).substring(0, 31);
+            XLSX.utils.book_append_sheet(wb, wsRT, sheetTitle);
+          }
+        });
+      } else {
+        masterDesaList.forEach(d => {
+          const wargaDesa = dataset.filter(p => getDesaClean(p) === d.id);
+          if (wargaDesa.length > 0) {
+            const rowsDesa = wargaDesa.map((p, idx) => ({
+              "NO": idx + 1,
+              "WILAYAH DESA": d.nama,
+              "RT/RW": p.rt,
+              "NO KK": isLogin ? p.no_kk : maskSensitive(p.no_kk),
+              "NIK": isLogin ? p.nik : maskSensitive(p.nik),
+              "NAMA": p.nama,
+              "JK": p.jk,
+              "HUBUNGAN": p.hubungan,
+              "TTL": p.ttl,
+              "USIA": p.usia_text || p.usia,
+              "PEKERJAAN": p.pekerjaan,
+              "PUS": p.isPUS ? 1 : "",
+              "WUS": p.isWUS ? 1 : "",
+              "KB": p.kb || "",
+              "IBU HAMIL": p.isBumil ? 1 : "",
+              "BAYI / BALITA": p.isBalita ? 1 : "",
+              "4T": isLogin ? (p.is4T ? 1 : "") : "Terkunci",
+              "ALKI": isLogin ? (p.isALKI ? 1 : "") : "Terkunci"
+            }));
+            const wsDesa = XLSX.utils.json_to_sheet(rowsDesa);
+            autoFitColumns(wsDesa, rowsDesa);
+            const sheetLabel = d.nama.replace('Desa ', '').substring(0, 28);
+            XLSX.utils.book_append_sheet(wb, wsDesa, sheetLabel);
+          }
+        });
+      }
+
+      const fileName = `DATA_PENDUDUK_${namaDesa}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    }
+
+    // Inisialisasi awal
+    updateVersionLabels(localAppVersion);
+  </script>
+</body>
+</html>
