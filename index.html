@@ -63,6 +63,12 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
+  <!-- TOAST NOTIFIKASI SALIN CEPAT -->
+  <div id="copyToast" class="fixed bottom-5 right-5 z-50 transform translate-y-16 opacity-0 transition-all duration-300 pointer-events-none bg-slate-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold border border-white/10">
+    <span class="text-emerald-400 text-sm"><i class="fa-solid fa-circle-check"></i></span>
+    <span id="copyToastText">Teks berhasil disalin ke clipboard</span>
+  </div>
+
   <!-- BANNER AUTO-UPDATE -->
   <div id="updateBanner" class="hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-teal-600 text-white shadow-lg sticky top-0 z-50 animate-slide-down border-b border-white/20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
@@ -265,7 +271,7 @@
       </div>
     </div>
 
-    <!-- TABEL DATA SASARAN DENGAN PAGINASI -->
+    <!-- TABEL DATA SASARAN DENGAN QUICK COPY & PAGINASI -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       
       <!-- Pengaturan Jumlah Baris & Info -->
@@ -322,7 +328,7 @@
     </div>
   </main>
 
-  <!-- MODAL MATRIKS REKAPITULASI SASARAN KESEHATAN (DENGAN LOCK FREEZE COLUMN NAMA/DESA) -->
+  <!-- MODAL MATRIKS REKAPITULASI SASARAN KESEHATAN (FREEZE COLUMN NO & DESA) -->
   <div id="modalMatriks" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-2 sm:p-4">
     <div id="modalMatriksContent" class="bg-white rounded-2xl max-w-7xl w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
       
@@ -436,7 +442,7 @@
               </div>
               <div class="sm:col-span-2">
                 <label class="block text-[11px] font-semibold text-slate-600 uppercase mb-0.5">Catatan Perubahan (Changelog)</label>
-                <input type="text" id="inputVersionChangelog" placeholder="Penambahan freeze column lock pada matriks dan auto-check sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                <input type="text" id="inputVersionChangelog" placeholder="Validasi NIK 16 digit & deteksi duplikasi real-time" class="w-full border border-slate-300 rounded-lg p-2 text-xs">
               </div>
             </div>
             <div class="flex justify-end pt-1">
@@ -482,7 +488,7 @@
     </div>
   </div>
 
-  <!-- MODAL FORM SASARAN (DENGAN TEMPAT & TANGGAL LAHIR TERPISAH) -->
+  <!-- MODAL FORM SASARAN (DENGAN VALIDASI NIK 16 DIGIT & CEK DUPLIKASI REAL-TIME) -->
   <div id="modalForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
       <div class="p-5 bg-teal-700 text-white flex justify-between items-center rounded-t-2xl">
@@ -522,8 +528,21 @@
                 <i class="fa-solid fa-wand-magic-sparkles"></i> Terdeteksi Otomatis
               </span>
             </label>
-            <input type="text" id="formNIK" oninput="handleNIKInput(this.value)" placeholder="16 Digit NIK Sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none">
+            <input type="text" id="formNIK" maxlength="16" oninput="handleNIKInput(this.value)" placeholder="16 Digit NIK Sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none transition">
+            
+            <!-- Live Indicator Validasi NIK & Duplikasi -->
+            <div class="flex items-center justify-between text-[11px] mt-1">
+              <span id="nikCharCounter" class="text-slate-400 font-mono">0/16 digit</span>
+              <span id="nikValidationStatus" class="font-medium"></span>
+            </div>
+            
+            <!-- Alert Box Jika NIK Sudah Ada / Duplikat -->
+            <div id="nikDuplicateAlert" class="hidden mt-1.5 p-2 bg-rose-50 border border-rose-300 text-rose-700 text-xs rounded-lg flex items-start gap-1.5">
+              <i class="fa-solid fa-triangle-exclamation mt-0.5 text-rose-500"></i>
+              <div id="nikDuplicateAlertText" class="leading-tight"></div>
+            </div>
           </div>
+
           <div>
             <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nama Lengkap</label>
             <input type="text" id="formNama" required placeholder="Nama Sasaran" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
@@ -608,7 +627,7 @@
 
         <div class="flex justify-end gap-3 pt-3">
           <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">Batal</button>
-          <button type="submit" class="px-5 py-2 bg-teal-700 hover:bg-teal-600 text-white rounded-lg text-sm font-semibold shadow-sm">Simpan Data</button>
+          <button type="submit" id="btnSubmitSasaran" class="px-5 py-2 bg-teal-700 hover:bg-teal-600 text-white rounded-lg text-sm font-semibold shadow-sm transition">Simpan Data</button>
         </div>
       </form>
     </div>
@@ -617,8 +636,47 @@
   <!-- SCRIPT LOGIC & FIREBASE -->
   <script>
     // ==========================================
-    // 0. AUTO-DETEKSI NIK & AUTO-CENTANG SASARAN
+    // 0. FITUR QUICK COPY (SALIN CEPAT KE CLIPBOARD)
     // ==========================================
+    let toastTimeout = null;
+
+    function copyToClipboard(text, btnElement, label) {
+      if (!text || text === '-' || text.includes('***')) return;
+
+      const cleanText = String(text).replace(/['",\s]/g, '').trim();
+
+      navigator.clipboard.writeText(cleanText).then(() => {
+        if (btnElement) {
+          const originalHTML = btnElement.innerHTML;
+          btnElement.innerHTML = '<i class="fa-solid fa-check text-emerald-600"></i>';
+          btnElement.classList.add('scale-110');
+          setTimeout(() => {
+            btnElement.innerHTML = originalHTML;
+            btnElement.classList.remove('scale-110');
+          }, 1500);
+        }
+
+        const toast = document.getElementById('copyToast');
+        const toastText = document.getElementById('copyToastText');
+        toastText.innerText = `${label} (${cleanText}) berhasil disalin!`;
+        toast.classList.remove('translate-y-16', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          toast.classList.remove('translate-y-0', 'opacity-100');
+          toast.classList.add('translate-y-16', 'opacity-0');
+        }, 2200);
+      }).catch(err => {
+        console.error("Gagal menyalin:", err);
+      });
+    }
+
+    // ==========================================
+    // 1. AUTO-DETEKSI NIK, VALIDASI 16 DIGIT & CEK DUPLIKASI REAL-TIME
+    // ==========================================
+    let hasDuplicateNIK = false;
+
     function calculateAgeFromDate(birthDateObj) {
       if (!birthDateObj || isNaN(birthDateObj.getTime())) return null;
 
@@ -726,10 +784,78 @@
       };
     }
 
+    function checkDuplicateNIKRealTime(nikDigits, currentDocId) {
+      const duplicateAlert = document.getElementById('nikDuplicateAlert');
+      const duplicateAlertText = document.getElementById('nikDuplicateAlertText');
+      const btnSubmit = document.getElementById('btnSubmitSasaran');
+      const validationStatus = document.getElementById('nikValidationStatus');
+      const inputNIK = document.getElementById('formNIK');
+
+      hasDuplicateNIK = false;
+
+      if (!nikDigits || nikDigits.length < 16) {
+        duplicateAlert.classList.add('hidden');
+        if (btnSubmit) btnSubmit.disabled = false;
+        return;
+      }
+
+      // Cari apakah NIK sudah dipakai oleh warga lain
+      const duplicateItem = allData.find(item => {
+        const itemNIK = String(item.nik || '').replace(/\D/g, '').trim();
+        return itemNIK === nikDigits && item.id !== currentDocId;
+      });
+
+      if (duplicateItem) {
+        hasDuplicateNIK = true;
+        const desaNama = getDesaNama(getDesaClean(duplicateItem));
+        const rtNama = duplicateItem.rt || '-';
+        duplicateAlertText.innerHTML = `<strong>Peringatan Duplikasi:</strong> NIK ini sudah terdaftar atas nama <strong>${duplicateItem.nama}</strong> (${desaNama}, RT ${rtNama}).`;
+        duplicateAlert.classList.remove('hidden');
+
+        inputNIK.classList.remove('border-slate-300', 'border-emerald-500');
+        inputNIK.classList.add('border-rose-500');
+        validationStatus.innerHTML = '<span class="text-rose-600 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> NIK Duplikat</span>';
+
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+      } else {
+        duplicateAlert.classList.add('hidden');
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      }
+    }
+
     function handleNIKInput(val) {
-      const parsed = parseNIK(val);
+      const cleanVal = String(val).replace(/\D/g, '').trim();
+      const inputEl = document.getElementById('formNIK');
+      inputEl.value = cleanVal;
+
+      const currentDocId = document.getElementById('formDocId').value;
+      const counterEl = document.getElementById('nikCharCounter');
+      const validationStatus = document.getElementById('nikValidationStatus');
       const badge = document.getElementById('nikDetectBadge');
-      
+
+      counterEl.innerText = `${cleanVal.length}/16 digit`;
+
+      if (cleanVal.length === 16) {
+        inputEl.classList.remove('border-slate-300', 'border-rose-500', 'border-amber-400');
+        inputEl.classList.add('border-emerald-500');
+        validationStatus.innerHTML = '<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-check-circle"></i> Format Valid</span>';
+      } else if (cleanVal.length > 0) {
+        inputEl.classList.remove('border-emerald-500', 'border-rose-500');
+        inputEl.classList.add('border-amber-400');
+        validationStatus.innerHTML = `<span class="text-amber-600 font-medium">Kurang ${16 - cleanVal.length} digit</span>`;
+      } else {
+        inputEl.classList.remove('border-emerald-500', 'border-rose-500', 'border-amber-400');
+        inputEl.classList.add('border-slate-300');
+        validationStatus.innerHTML = '';
+      }
+
+      const parsed = parseNIK(cleanVal);
       if (parsed) {
         badge.classList.remove('hidden');
         document.getElementById('formJK').value = parsed.gender;
@@ -741,6 +867,9 @@
       } else {
         badge.classList.add('hidden');
       }
+
+      // Validasi duplikasi real-time
+      checkDuplicateNIKRealTime(cleanVal, currentDocId);
     }
 
     function handleTglLahirChange(val) {
@@ -758,7 +887,7 @@
     }
 
     // ==========================================
-    // 1. SISTEM VERSI DINAMIS & AUTO-UPDATE ENGINE
+    // 2. SISTEM VERSI DINAMIS & AUTO-UPDATE ENGINE
     // ==========================================
     const DEFAULT_APP_VERSION = "v1.2.0";
     let localAppVersion = localStorage.getItem('sibidan_app_version') || DEFAULT_APP_VERSION;
@@ -773,7 +902,7 @@
     }
 
     // ==========================================
-    // 2. KONFIGURASI FIREBASE PROJECT
+    // 3. KONFIGURASI FIREBASE PROJECT
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyDBmMLQzX6yQFGeqF46AZuPIUiNS5TuqAI",
@@ -1029,7 +1158,7 @@
     initAppVersionListener();
 
     // ==========================================
-    // 3. MODAL MATRIKS REKAPITULASI SASARAN KESEHATAN (FREEZE COLUMN NO & DESA)
+    // 4. MODAL MATRIKS REKAPITULASI SASARAN KESEHATAN (FREEZE COLUMN NO & DESA)
     // ==========================================
     function openModalMatriks() {
       const isGlobal = (activeDesa === 'ALL');
@@ -1331,15 +1460,13 @@
       });
 
       const ws = XLSX.utils.json_to_sheet(excelRows);
-      autoFitColumns(ws, excelRows);
-      
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "REKAPAN TOTAL");
+      autoFitColumns(wsRekap, excelRows);
+      XLSX.utils.book_append_sheet(wb, wsRekap, "REKAPAN TOTAL");
       XLSX.writeFile(wb, `REKAP_SASARAN_${namaDesa}_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
     // ==========================================
-    // 4. RESET DATA DESA AKTIF
+    // 5. RESET DATA DESA AKTIF
     // ==========================================
     async function hapusDataDesaAktif() {
       if (!currentUser) return alert("Hanya admin/petugas yang berhak mereset data.");
@@ -1382,7 +1509,7 @@
     }
 
     // ==========================================
-    // 5. MANAJEMEN MASTER DESA & AUTH
+    // 6. MANAJEMEN MASTER DESA & AUTH
     // ==========================================
     function openModalDesa() {
       if (!currentUser) return alert("Hanya admin yang dapat mengelola sistem.");
@@ -1528,7 +1655,7 @@
     }
 
     // ==========================================
-    // 6. DASHBOARD & FILTERING DENGAN PAGINASI
+    // 7. DASHBOARD & FILTERING DENGAN QUICK COPY & PAGINASI
     // ==========================================
     function updateDashboard() {
       const filteredByDesa = allData.filter(p => {
@@ -1668,17 +1795,35 @@
         const displayedNIK = isLogin ? (item.nik || '-') : maskSensitive(item.nik);
         const desaLabel = getDesaNama(getDesaClean(item));
 
+        const copyKKBtn = (isLogin && item.no_kk && item.no_kk !== '-') ? `
+          <button type="button" onclick="copyToClipboard('${item.no_kk}', this, 'No. KK')" class="text-slate-400 hover:text-teal-600 ml-1.5 transition inline-flex items-center p-0.5" title="Salin No. KK">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        ` : '';
+
+        const copyNIKBtn = (isLogin && item.nik && item.nik !== '-') ? `
+          <button type="button" onclick="copyToClipboard('${item.nik}', this, 'NIK')" class="text-slate-400 hover:text-teal-600 ml-1.5 transition inline-flex items-center p-0.5" title="Salin NIK">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        ` : '';
+
         return `
           <tr class="hover:bg-slate-50 transition">
             <td class="py-3 px-3 text-center text-slate-400">${startIndex + index + 1}</td>
             <td class="py-3 px-3">
               <div class="font-bold text-xs text-teal-800">${desaLabel}</div>
               <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 mt-0.5 mb-1">${item.rt ? (item.rt.startsWith('0') || item.rt.includes('/') ? 'RT/RW ' + item.rt : 'RT ' + item.rt) : '-'}</span>
-              <div class="text-[11px] text-slate-400">KK: ${displayedNoKK}</div>
+              <div class="text-[11px] text-slate-500 font-mono flex items-center">
+                <span>KK: ${displayedNoKK}</span>
+                ${copyKKBtn}
+              </div>
             </td>
             <td class="py-3 px-3 font-semibold text-slate-800">
-              ${item.nama}
-              <div class="text-[11px] text-slate-500 font-mono">NIK: ${displayedNIK}</div>
+              <div class="font-bold text-slate-800">${item.nama}</div>
+              <div class="text-[11px] text-slate-500 font-mono flex items-center">
+                <span>NIK: ${displayedNIK}</span>
+                ${copyNIKBtn}
+              </div>
               <div class="text-[11px] font-normal text-slate-400">${item.ttl || ''}</div>
             </td>
             <td class="py-3 px-3 text-center">
@@ -1746,7 +1891,7 @@
     }
 
     // ==========================================
-    // 7. CRUD DATA SASARAN
+    // 8. CRUD DATA SASARAN (DENGAN CEK VALIDASI NIK)
     // ==========================================
     function openModalTambah() {
       if (!currentUser) return alert("Hanya petugas yang berhak menambah sasaran.");
@@ -1754,6 +1899,20 @@
       document.getElementById('pendudukForm').reset();
       document.getElementById('formDocId').value = '';
       document.getElementById('nikDetectBadge').classList.add('hidden');
+      document.getElementById('nikDuplicateAlert').classList.add('hidden');
+      document.getElementById('nikValidationStatus').innerHTML = '';
+      document.getElementById('nikCharCounter').innerText = '0/16 digit';
+      
+      const inputNIK = document.getElementById('formNIK');
+      inputNIK.classList.remove('border-emerald-500', 'border-rose-500', 'border-amber-400');
+      inputNIK.classList.add('border-slate-300');
+
+      const btnSubmit = document.getElementById('btnSubmitSasaran');
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+
       document.getElementById('formTempatLahir').value = '';
       document.getElementById('formTglLahir').value = '';
       document.getElementById('formDesa').value = (activeDesa !== 'ALL') ? activeDesa : (masterDesaList[0]?.id || 'SAMPANAHAN_HILIR');
@@ -1774,7 +1933,9 @@
       document.getElementById('formDesa').value = getDesaClean(item);
       document.getElementById('formRT').value = item.rt || '';
       document.getElementById('formNoKK').value = item.no_kk || '';
-      document.getElementById('formNIK').value = item.nik || '';
+      
+      const nikClean = String(item.nik || '').replace(/\D/g, '').trim();
+      document.getElementById('formNIK').value = nikClean;
       document.getElementById('formNama').value = item.nama || '';
       document.getElementById('formJK').value = item.jk || 'L';
       document.getElementById('formHubungan').value = item.hubungan || '';
@@ -1808,6 +1969,24 @@
       document.getElementById('formALKI').checked = !!item.isALKI;
 
       document.getElementById('nikDetectBadge').classList.add('hidden');
+      
+      // Update UI validasi NIK saat edit
+      const inputNIK = document.getElementById('formNIK');
+      const counterEl = document.getElementById('nikCharCounter');
+      const validationStatus = document.getElementById('nikValidationStatus');
+      counterEl.innerText = `${nikClean.length}/16 digit`;
+
+      if (nikClean.length === 16) {
+        inputNIK.classList.remove('border-slate-300', 'border-rose-500');
+        inputNIK.classList.add('border-emerald-500');
+        validationStatus.innerHTML = '<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-check-circle"></i> Format Valid</span>';
+      } else {
+        inputNIK.classList.remove('border-emerald-500', 'border-rose-500');
+        inputNIK.classList.add('border-slate-300');
+        validationStatus.innerHTML = '';
+      }
+
+      checkDuplicateNIKRealTime(nikClean, item.id);
       document.getElementById('modalForm').classList.remove('hidden');
     }
 
@@ -1818,9 +1997,21 @@
       const docId = document.getElementById('formDocId').value;
       const desaVal = document.getElementById('formDesa').value;
       const usiaVal = document.getElementById('formUsia').value.trim();
-      const nikClean = document.getElementById('formNIK').value.replace(/['",\s]/g, '').trim();
+      const nikClean = document.getElementById('formNIK').value.replace(/\D/g, '').trim();
       const namaClean = document.getElementById('formNama').value.trim();
       const rtClean = document.getElementById('formRT').value.trim();
+
+      // Pencegahan submit jika NIK duplikat
+      if (hasDuplicateNIK) {
+        alert("Penyimpanan ditolak: NIK ini sudah terdaftar pada sasaran lain di sistem. Harap gunakan NIK yang valid!");
+        return;
+      }
+
+      // Validasi konfirmasi jika NIK bukan 16 digit
+      if (nikClean.length > 0 && nikClean.length !== 16) {
+        const konfirmasiNIK = confirm(`Panjang NIK yang Anda masukkan (${nikClean.length} digit) tidak sesuai standar 16 digit.\n\nApakah tetap ingin menyimpan data ini?`);
+        if (!konfirmasiNIK) return;
+      }
       
       const tempatLahirVal = document.getElementById('formTempatLahir').value.trim();
       const tglLahirVal = document.getElementById('formTglLahir').value;
@@ -1921,7 +2112,7 @@
     }
 
     // ==========================================
-    // 8. IMPORT EXCEL AUTO-HEADER DETECTION
+    // 9. IMPORT EXCEL AUTO-HEADER DETECTION
     // ==========================================
     function triggerExcelUpload() {
       if (activeDesa === 'ALL') {
@@ -2178,7 +2369,7 @@
     }
 
     // ==========================================
-    // 9. EKSPOR LAPORAN MULTI-SHEET LENGKAP & AUTO-WIDTH
+    // 10. EKSPOR LAPORAN MULTI-SHEET LENGKAP & AUTO-WIDTH
     // ==========================================
     function exportToExcel() {
       const isLogin = !!currentUser;
@@ -2324,7 +2515,7 @@
       XLSX.writeFile(wb, fileName);
     }
 
-    // Inisialisasi awal
+    // Inisialisasi awal versi
     updateVersionLabels(localAppVersion);
   </script>
 </body>
